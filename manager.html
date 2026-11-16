@@ -1,0 +1,1520 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Patient Check List</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Standalone page: no server and no accounts. Everything is kept in this browser
+     and leaves it only as an Excel file the companion sends to the study manager. */
+  :root {
+    --bg: #F1F4F7;
+    --surface: #FFFFFF;
+    --field: #F5F7F9;
+    --ink: #14202B;
+    --muted: #586878;
+    --line: #D8DFE6;
+    --box: #8F9DAB;
+    --accent: #2350C4;
+    --accent-ink: #FFFFFF;
+    --done: #1A8452;
+    --done-ink: #FFFFFF;
+    --na: #A7B3BF;
+    --warn-bg: #FBEFDD;
+    --warn-ink: #7A3E05;
+    --danger: #B3261E;
+    --danger-bg: #FBE9E7;
+    --font: "IBM Plex Sans Hebrew", "Heebo", "Segoe UI", "Arial Hebrew", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0E141A;
+      --surface: #172029;
+      --field: #101920;
+      --ink: #E7EDF2;
+      --muted: #95A4B3;
+      --line: #2A3743;
+      --box: #6F7F8F;
+      --accent: #8CACFF;
+      --accent-ink: #0B1530;
+      --done: #52C592;
+      --done-ink: #06231A;
+      --na: #55636F;
+      --warn-bg: #36280F;
+      --warn-ink: #F3C487;
+      --danger: #FF8A80;
+      --danger-bg: #3A1B19;
+      color-scheme: dark;
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1, h2, h3, p, ul, ol { margin: 0; padding: 0; }
+  ul, ol { list-style: none; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  .wrap {
+    max-width: 34rem;
+    margin-inline: auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-top: max(20px, env(safe-area-inset-top, 0px));
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .wrap.wide { max-width: 64rem; }
+  .view { display: flex; flex-direction: column; gap: 18px; }
+
+  .banner { background: var(--warn-bg); color: var(--warn-ink); border-radius: 10px; padding: 10px 14px; font-size: 14px; }
+
+  .top { display: flex; flex-direction: column; gap: 4px; }
+  .eyebrow { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; }
+  h1 { font-size: 26px; line-height: 1.2; font-weight: 700; text-wrap: balance; }
+  .lede { color: var(--muted); font-size: 15px; }
+  .hint { font-size: 13px; color: var(--muted); }
+  .error { font-size: 14px; color: var(--danger); font-weight: 500; }
+  .status { color: var(--muted); font-size: 15px; padding-block: 8px; }
+
+  .tabs {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 4px;
+    margin-top: 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .tab { min-height: 40px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 600; font-size: 15px; }
+  .tab[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
+
+  .add {
+    display: flex; flex-direction: column; gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .add-title { font-size: 18px; font-weight: 600; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 14px; font-weight: 600; }
+  input[type="text"], input[type="search"] {
+    width: 100%;
+    height: 48px;
+    padding: 0 14px;
+    background: var(--field);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: 16px;
+  }
+  input[type="search"] { background: var(--surface); }
+  input[type="text"]:focus, input[type="search"]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+  #new-code { font-family: var(--mono), var(--font); }
+
+  .btn {
+    min-height: 48px;
+    padding: 0 18px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.danger { background: var(--danger); color: var(--surface); border-color: var(--danger); }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--danger); padding-inline: 8px; font-weight: 500; }
+  .btn.small { min-height: 40px; padding: 0 14px; font-size: 14px; }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .panel > li + li { border-top: 1px solid var(--line); }
+
+  .list-head, .view-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 12px; flex-wrap: wrap; }
+  .list-head h2 { font-size: 18px; font-weight: 600; }
+  .view-head h2 { font-size: 20px; font-weight: 700; }
+  .view-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 12px;
+    align-items: baseline;
+    padding: 14px 16px;
+    text-decoration: none;
+    color: inherit;
+  }
+  .row:active { background: var(--field); }
+  .row-code { font-family: var(--mono), var(--font); font-weight: 600; font-size: 18px; min-width: 0; overflow-wrap: anywhere; text-align: right; }
+  .row-count { font-family: var(--mono); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row .segs { grid-column: 1 / -1; }
+  .row-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); }
+  .pill-done { color: var(--done); font-weight: 600; font-size: 14px; }
+  .unsent { color: var(--warn-ink); font-weight: 600; }
+
+  .segs { display: flex; gap: 3px; }
+  .segs span { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+  .segs span.on { background: var(--done); }
+  .segs span.na { background: var(--na); }
+
+  .empty { display: flex; flex-direction: column; gap: 10px; }
+  .empty h2 { font-size: 18px; font-weight: 600; }
+  .empty p { color: var(--muted); font-size: 15px; }
+  .protocol li { display: flex; gap: 12px; align-items: baseline; padding: 11px 16px; font-size: 15px; }
+  .protocol .n { font-family: var(--mono); color: var(--muted); font-size: 13px; width: 1.2em; flex: none; }
+  .protocol .t { flex: 1; min-width: 0; }
+  .tag {
+    display: inline-block; font-size: 12px; font-weight: 500; line-height: 1.5; padding: 0 8px;
+    border: 1px solid var(--line); border-radius: 999px; color: var(--muted); white-space: nowrap;
+  }
+
+  .dbbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px;
+  }
+  .dbbar-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 18rem; min-width: 0; }
+  .dbbar h2 { font-size: 16px; font-weight: 600; }
+  .dbbar .error { font-weight: 500; }
+
+  /* ---------- patient view ---------- */
+  .dhead {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--bg);
+    padding-block: 10px 12px;
+    margin-top: -10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .dhead-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .back {
+    display: inline-flex; align-items: center; gap: 4px;
+    min-height: 40px; padding: 0 10px 0 12px; margin-inline-start: -10px;
+    background: transparent; border: 0; border-radius: 8px;
+    color: var(--accent); font-weight: 600; font-size: 15px;
+  }
+  .back svg { width: 18px; height: 18px; flex: none; }
+  .save { font-size: 13px; color: var(--done); min-height: 1.5em; }
+  .code { font-family: var(--mono), var(--font); font-size: 24px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .count { font-size: 14px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  .step { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .step-head {
+    display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start;
+    width: 100%; padding: 0; background: transparent; border: 0; border-radius: 8px; text-align: start;
+  }
+  .box {
+    width: 34px; height: 34px; border: 2px solid var(--box); border-radius: 9px;
+    display: grid; place-items: center; color: transparent; background: var(--surface); margin-top: 2px;
+  }
+  .box svg { width: 20px; height: 20px; }
+  .box .i-dash { display: none; }
+  .step[data-state="done"] .box { background: var(--done); border-color: var(--done); color: var(--done-ink); }
+  .step[data-state="na"] .box { border-style: dashed; color: var(--muted); }
+  .step[data-state="na"] .box .i-check { display: none; }
+  .step[data-state="na"] .box .i-dash { display: block; }
+  .step[data-state="na"] .step-title { color: var(--muted); }
+  .step-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .step-eyebrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .step-num { font-weight: 500; }
+  .step-title { font-size: 17px; font-weight: 600; line-height: 1.35; }
+  .step-hint { font-size: 14px; color: var(--muted); }
+  .step-meta { font-size: 13px; color: var(--done); font-weight: 500; }
+  .step[data-state="na"] .step-meta { color: var(--muted); }
+  .step-extra { padding-inline-start: 46px; display: flex; flex-direction: column; gap: 8px; }
+  .chip {
+    align-self: flex-start; min-height: 36px; padding: 0 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--surface); font-size: 14px; font-weight: 500; color: var(--muted);
+  }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  textarea.note {
+    display: block; width: 100%; min-height: 44px; padding: 10px 12px;
+    background: var(--field); border: 1px solid var(--line); border-radius: 10px;
+    font-size: 16px; line-height: 1.45; resize: none; overflow: hidden;
+  }
+  textarea.note::placeholder { color: var(--muted); }
+
+  .send-box {
+    display: flex; flex-direction: column; gap: 10px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+  }
+  .send-box h2 { font-size: 16px; font-weight: 600; }
+  .dfoot { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+  .confirm { width: 100%; background: var(--danger-bg); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .confirm p { font-size: 15px; }
+
+  /* ---------- dashboard ---------- */
+  .dash { display: flex; flex-direction: column; gap: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px;
+    display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  }
+  .tile-label { font-size: 13px; color: var(--muted); }
+  .tile-value { font-size: 30px; font-weight: 600; line-height: 1.15; }
+  .tile-sub { font-size: 12px; color: var(--muted); line-height: 1.35; }
+  .dash-grid, .dash-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  @media (min-width: 760px) {
+    .dash-grid { display: grid; grid-template-columns: 1.2fr 1fr; align-items: start; }
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+    display: flex; flex-direction: column; gap: 12px; min-width: 0;
+  }
+  .card h3 { font-size: 16px; font-weight: 600; }
+  .card .sub { font-size: 13px; color: var(--muted); margin-top: -8px; }
+  .bars { display: flex; flex-direction: column; gap: 13px; }
+  .bar-row { display: flex; flex-direction: column; gap: 5px; }
+  .bar-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; }
+  .bar-name { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .bar-name .n { font-family: var(--mono); font-size: 13px; color: var(--muted); flex: none; }
+  .bar-val { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bar-track, .bar-fill { height: 10px; border-start-end-radius: 4px; border-end-end-radius: 4px; }
+  .bar-track { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+  .bar-fill { background: var(--accent); }
+  .bar-note { font-size: 12px; color: var(--muted); }
+  .plain > li + li { border-top: 1px solid var(--line); }
+  .open-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline;
+    padding: 10px 0; color: inherit; text-decoration: none;
+  }
+  .open-row .row-code { font-size: 16px; }
+  .open-comp { font-size: 13px; color: var(--muted); }
+  .open-miss { grid-column: 1 / -1; font-size: 14px; color: var(--muted); }
+  .mini { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .mini th, .mini td { padding: 9px 0; text-align: start; font-weight: 400; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+  .mini thead th { border-top: 0; padding-top: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .mini th:not(:first-child), .mini td { width: 5rem; text-align: center; font-variant-numeric: tabular-nums; }
+
+  /* ---------- tracking table ---------- */
+  .panel.table-scroll { overflow-x: auto; overflow-y: hidden; }
+  .track { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 14px; }
+  .track th, .track td { padding: 11px 8px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--line); font-weight: 400; }
+  .track tbody tr:last-child th, .track tbody tr:last-child td { border-bottom: 0; }
+  .track thead th { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--field); }
+  .track .c-code {
+    position: sticky; inset-inline-start: 0; z-index: 1; background: var(--surface);
+    text-align: start; padding-inline: 14px 12px; border-inline-end: 1px solid var(--line);
+  }
+  .track thead .c-code { background: var(--field); }
+  .track tbody .c-code { font-family: var(--mono), var(--font); font-weight: 600; font-size: 15px; }
+  .track .c-code a { color: inherit; text-decoration: none; }
+  .track .c-text { text-align: start; color: var(--muted); padding-inline: 12px; }
+  .track .c-step { position: relative; min-width: 36px; padding-inline: 4px; }
+  .track tbody tr { cursor: pointer; }
+  .mark { display: inline-grid; place-items: center; color: var(--done); vertical-align: middle; }
+  .mark svg { width: 17px; height: 17px; }
+  .mark-na { color: var(--muted); font-weight: 600; }
+  .track .has-note::after, .legend .dot { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  .track .has-note::after { position: absolute; bottom: 4px; left: 50%; margin-left: -2.5px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .dot { display: inline-block; }
+
+  .toast {
+    position: fixed;
+    left: max(16px, env(safe-area-inset-left, 0px));
+    right: max(16px, env(safe-area-inset-right, 0px));
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    max-width: 30rem;
+    margin-inline: auto;
+    z-index: 20;
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 14px;
+    text-align: center;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .box { transition: background-color 120ms ease, border-color 120ms ease; }
+    .segs span { transition: background-color 160ms ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="banner" id="banner-store" hidden>הדפדפן לא מאפשר שמירה במכשיר (למשל בגלישה פרטית). מה שתסמנו יימחק כשהדף ייסגר, אז שלחו את הסיכום לפני הסגירה.</div>
+
+  <header class="top" id="top">
+    <p class="eyebrow" id="eyebrow">ליווי מטופל במחקר</p>
+    <h1>Patient Check List</h1>
+    <nav class="tabs" id="tabs" aria-label="תצוגות">
+      <button type="button" class="tab" data-view="">מילוי</button>
+      <button type="button" class="tab" data-view="dashboard">דשבורד</button>
+      <button type="button" class="tab" data-view="table">טבלה</button>
+    </nav>
+  </header>
+
+  <section class="dbbar" id="db-bar" hidden>
+    <div class="dbbar-text">
+      <h2>קובץ המאגר</h2>
+      <p class="hint" id="db-status"></p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn small primary" id="db-resume" hidden></button>
+      <button type="button" class="btn small primary" id="db-save" hidden>שמירה עכשיו</button>
+      <button type="button" class="btn small" id="db-open">פתיחת קובץ קיים</button>
+      <button type="button" class="btn small" id="db-new">קובץ חדש</button>
+    </div>
+  </section>
+
+  <!-- ===== companion: fill in ===== -->
+  <section class="view" id="view-list">
+    <p class="lede">תשעה שלבים לכל מטופל. המלווה רושם את שמו, מסמן כל שלב שהושלם, ובסוף שולח את הסיכום למנהל המחקר.</p>
+
+    <form class="add" id="add-form" novalidate>
+      <h2 class="add-title">מטופל חדש</h2>
+      <div class="field">
+        <label for="new-companion">שם המלווה</label>
+        <input type="text" id="new-companion" name="companion" dir="auto" autocomplete="off" spellcheck="false" maxlength="60">
+      </div>
+      <div class="field">
+        <label for="new-code">קוד מטופל</label>
+        <input type="text" id="new-code" name="code" dir="auto" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" aria-describedby="add-hint">
+        <p class="hint" id="add-hint">קוד בלבד, בלי שם או תעודת זהות של המטופל.</p>
+      </div>
+      <p class="error" id="add-error" role="alert" hidden></p>
+      <button type="submit" class="btn primary">פתיחת צ׳קליסט</button>
+    </form>
+
+    <div class="list-head" id="list-head" hidden>
+      <h2 id="list-title">מטופלים במכשיר הזה</h2>
+      <button type="button" class="btn small" id="send-all">שליחת הכול</button>
+    </div>
+    <div id="search-box" hidden>
+      <label class="vh" for="search">חיפוש לפי קוד</label>
+      <input type="search" id="search" dir="auto" autocomplete="off" spellcheck="false" placeholder="חיפוש לפי קוד">
+    </div>
+    <p class="status" id="list-status" role="status" hidden></p>
+    <ul class="panel" id="people" hidden></ul>
+
+    <div class="empty" id="empty" hidden>
+      <h2>עדיין אין מטופלים במכשיר הזה</h2>
+      <p>הוסיפו קוד מטופל למעלה, וייפתח לו צ׳קליסט עם השלבים האלה:</p>
+      <ol class="panel protocol" id="protocol"></ol>
+    </div>
+  </section>
+
+  <!-- ===== study manager: dashboard ===== -->
+  <section class="view" id="view-dash" hidden>
+    <div class="view-head">
+      <h2>דשבורד</h2>
+      <div class="actions">
+        <button type="button" class="btn small js-import">ייבוא קבצים</button>
+        <button type="button" class="btn small primary js-export" hidden>ייצוא לאקסל</button>
+      </div>
+    </div>
+    <p class="hint" id="dash-hint">הדשבורד מציג את מה שנשמר או יובא במכשיר הזה. מנהל המחקר מייבא לכאן את קובצי האקסל שהמלווים שלחו.</p>
+    <p class="status" id="dash-status" role="status" hidden>עדיין אין נתונים. לחצו על "ייבוא קבצים" ובחרו את הקבצים שקיבלתם מהמלווים.</p>
+    <div class="dash" id="dash" hidden>
+      <div class="tiles" id="tiles"></div>
+      <div class="dash-grid">
+        <section class="card">
+          <h3>ביצוע לפי שלב</h3>
+          <p class="sub">כמה מטופלים ביצעו כל שלב, מתוך כלל המטופלים.</p>
+          <div class="bars" id="step-bars"></div>
+        </section>
+        <div class="dash-col">
+          <section class="card">
+            <h3>לא סיימו</h3>
+            <p class="sub" id="open-none" hidden>כל המטופלים סיימו את כל השלבים.</p>
+            <ul class="plain" id="open-list"></ul>
+            <p class="sub" id="open-more" hidden></p>
+          </section>
+          <section class="card">
+            <h3>לפי מלווה</h3>
+            <table class="mini">
+              <thead><tr><th scope="col">מלווה</th><th scope="col">מטופלים</th><th scope="col">סיימו</th></tr></thead>
+              <tbody id="comp-body"></tbody>
+            </table>
+          </section>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== study manager: table ===== -->
+  <section class="view" id="view-table" hidden>
+    <div class="view-head">
+      <div class="view-title">
+        <h2>טבלת מעקב</h2>
+        <span class="count" id="t-count"></span>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn small js-import">ייבוא קבצים</button>
+        <button type="button" class="btn small primary js-export" hidden>ייצוא לאקסל</button>
+      </div>
+    </div>
+    <p class="status" id="table-status" role="status" hidden>עדיין אין מטופלים.</p>
+    <div class="panel table-scroll" id="track-wrap" hidden>
+      <table class="track">
+        <thead><tr id="track-head"></tr></thead>
+        <tbody id="track-body"></tbody>
+      </table>
+    </div>
+    <p class="legend" id="legend" hidden>
+      <span><span class="mark" id="legend-mark"></span>בוצע</span>
+      <span><span class="mark-na">–</span>לא רלוונטי</span>
+      <span><span class="dot"></span>יש הערה</span>
+    </p>
+    <ol class="panel protocol" id="table-key" hidden></ol>
+  </section>
+
+  <!-- ===== one patient ===== -->
+  <section class="view" id="view-detail" hidden>
+    <header class="dhead">
+      <div class="dhead-row">
+        <button type="button" class="back" id="back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          חזרה
+        </button>
+        <span class="save" id="save" role="status"></span>
+      </div>
+      <div class="dhead-row">
+        <h1 class="code" id="d-code" dir="ltr"></h1>
+        <span class="count" id="d-count"></span>
+      </div>
+      <div class="segs" id="d-segs" role="img"></div>
+    </header>
+
+    <div class="field">
+      <label for="d-companion">שם המלווה</label>
+      <input type="text" id="d-companion" dir="auto" autocomplete="off" spellcheck="false" maxlength="60">
+    </div>
+
+    <ol class="panel" id="steps"></ol>
+
+    <div class="send-box" id="send-box">
+      <h2>סיום ושליחה</h2>
+      <p class="hint" id="sent-status"></p>
+      <button type="button" class="btn primary" id="send-one">שליחת הסיכום למנהל המחקר</button>
+      <button type="button" class="btn" id="download-one">הורדת קובץ אקסל</button>
+    </div>
+
+    <footer class="dfoot">
+      <button type="button" class="btn quiet" id="del">מחיקת המטופל מהמכשיר</button>
+      <div class="confirm" id="del-confirm" hidden>
+        <p>למחוק מהמכשיר הזה את המטופל ואת כל הסימונים וההערות שלו? אי אפשר לשחזר אחרי המחיקה.</p>
+        <div class="actions">
+          <button type="button" class="btn danger" id="del-yes">מחיקה</button>
+          <button type="button" class="btn" id="del-no">ביטול</button>
+        </div>
+      </div>
+    </footer>
+  </section>
+</div>
+
+<input type="file" id="import-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var STEPS = [
+    { id: 's1', title: 'שאלונים כלליים', where: 'REDCap' },
+    { id: 's2', title: 'קבלת סיכום ניתוח', hint: 'רק אם המטופל עבר ניתוח.', naLabel: 'לא היה ניתוח' },
+    { id: 's3', title: 'הערכה נוירולוגית', where: 'CANTAB' },
+    { id: 's4', title: 'שאלוני חרדה ודיכאון', where: 'REDCap' },
+    { id: 's5', title: 'בדיקת MRI' },
+    { id: 's6', title: 'בדיקות תנועה ו-Voice' },
+    { id: 's7', title: 'מעבדת שינה' },
+    { id: 's8', title: 'בדיקות דם', where: 'מלר״ד' },
+    { id: 's9', title: 'בדיקת דופלר', where: 'מכון הדופלר' }
+  ];
+  var TOTAL = STEPS.length;
+  // The same source builds two pages: 'companion' (fill in and send) and 'manager' (dashboard and table).
+  var MODE = 'manager';
+  var IS_MANAGER = MODE === 'manager';
+  var LS_KEY = IS_MANAGER ? 'patient-check-list-manager-v1' : 'patient-check-list-v1';
+  var XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  var FIRST_HEAD = 'קוד מטופל';
+  var ST_DONE = 'בוצע', ST_NA = 'לא רלוונטי';
+  var ID_RE = /^p[a-z0-9]{6,24}$/;
+
+  function $(id) { return document.getElementById(id); }
+  function all$(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function isObj(x) { return !!x && typeof x === 'object' && !Array.isArray(x); }
+  function newId() { return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function validDate(iso) {
+    if (typeof iso !== 'string' || !iso) return null;
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  var dtf = null;
+  try { dtf = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { dtf = null; }
+  function when(iso) {
+    var d = validDate(iso);
+    return d ? (dtf ? dtf.format(d) : d.toLocaleString()) : '';
+  }
+  // 'YYYY-MM-DD HH:MM' in local time: readable in Excel and easy to load into a database.
+  function stamp(iso) {
+    var d = validDate(iso);
+    return d ? d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) : '';
+  }
+  function parseStamp(text) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(text == null ? '' : text).trim());
+    if (!m) return '';
+    var d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    return isNaN(d.getTime()) ? '' : d.toISOString();
+  }
+  function today() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+
+  // ---------- storage: this browser only ----------
+  var data = {};            // id -> patient
+  var canStore = true;
+  var persistTimer = 0;
+  function load() {
+    try {
+      var raw = localStorage.getItem(LS_KEY);
+      var parsed = raw ? JSON.parse(raw) : {};
+      if (isObj(parsed)) {
+        Object.keys(parsed).forEach(function (id) {
+          var p = parsed[id];
+          if (ID_RE.test(id) && isObj(p) && typeof p.code === 'string') {
+            if (!isObj(p.steps)) p.steps = {};
+            data[id] = p;
+          }
+        });
+      }
+      localStorage.setItem(LS_KEY, JSON.stringify(data));
+    } catch (e) { canStore = false; }
+  }
+  function persist() {
+    clearTimeout(persistTimer);
+    persistTimer = 0;
+    try { localStorage.setItem(LS_KEY, JSON.stringify(data)); canStore = true; }
+    catch (e) { canStore = false; }
+    $('banner-store').hidden = canStore;
+    var s = $('save');
+    s.textContent = canStore ? 'נשמר במכשיר' : 'לא נשמר';
+    if (dbHandle) { clearTimeout(dbTimer); dbTimer = setTimeout(saveDbNow, 800); }
+  }
+  function persistSoon() {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(persist, 400);
+  }
+  function flushPersist() { if (persistTimer) persist(); }
+
+  // ---------- reading a patient ----------
+  function stepState(p, sid) {
+    var s = isObj(p.steps) && isObj(p.steps[sid]) ? p.steps[sid] : {};
+    return {
+      done: s.done === true,
+      na: s.na === true && s.done !== true,
+      doneAt: typeof s.doneAt === 'string' ? s.doneAt : '',
+      note: typeof s.note === 'string' ? s.note : ''
+    };
+  }
+  function companionOf(p) { return typeof p.companion === 'string' ? p.companion.trim() : ''; }
+  function resolved(p) {
+    var n = 0;
+    STEPS.forEach(function (st) { var s = stepState(p, st.id); if (s.done || s.na) n++; });
+    return n;
+  }
+  // Open patients first, newest first within each group.
+  function allPeople() {
+    var list = Object.keys(data).map(function (id) { return { id: id, p: data[id], n: resolved(data[id]) }; });
+    list.sort(function (a, b) {
+      var ad = a.n >= TOTAL ? 1 : 0, bd = b.n >= TOTAL ? 1 : 0;
+      if (ad !== bd) return ad - bd;
+      return String(b.p.createdAt || '').localeCompare(String(a.p.createdAt || ''));
+    });
+    return list;
+  }
+  function sendState(p) {
+    if (p.source === 'import') return { text: 'יובא מקובץ', pending: false };
+    if (!validDate(p.sentAt)) return { text: 'עוד לא נשלח', pending: true };
+    if (String(p.updatedAt || '') > p.sentAt) return { text: 'עודכן מאז השליחה', pending: true };
+    return { text: 'נשלח ' + when(p.sentAt), pending: false };
+  }
+  function fillSegs(box, p) {
+    var n = 0;
+    box.textContent = '';
+    STEPS.forEach(function (st) {
+      var s = stepState(p, st.id);
+      box.appendChild(el('span', s.done ? 'on' : (s.na ? 'na' : '')));
+      if (s.done || s.na) n++;
+    });
+    box.setAttribute('aria-label', n + ' מתוך ' + TOTAL + ' שלבים');
+    return n;
+  }
+
+  // ---------- Excel file: written and read here, no outside library ----------
+  var CRC_TABLE = (function () {
+    var t = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(u8) {
+    var c = 0xFFFFFFFF;
+    for (var i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  // A zip archive with stored (uncompressed) entries.
+  function zipStore(files) {
+    var enc = new TextEncoder(), chunks = [], central = [], offset = 0;
+    var d = new Date();
+    var dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    var dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    files.forEach(function (f) {
+      var name = enc.encode(f.name), body = enc.encode(f.text), crc = crc32(body), size = body.length;
+      var lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true);
+      lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true);
+      lh.setUint32(14, crc, true); lh.setUint32(18, size, true); lh.setUint32(22, size, true);
+      lh.setUint16(26, name.length, true);
+      chunks.push(new Uint8Array(lh.buffer), name, body);
+      var ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+      ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true);
+      ch.setUint32(16, crc, true); ch.setUint32(20, size, true); ch.setUint32(24, size, true);
+      ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+      central.push(new Uint8Array(ch.buffer), name);
+      offset += 30 + name.length + size;
+    });
+    var centralSize = central.reduce(function (s, c) { return s + c.length; }, 0);
+    var end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, centralSize, true); end.setUint32(16, offset, true);
+    var parts = chunks.concat(central, [new Uint8Array(end.buffer)]);
+    var out = new Uint8Array(parts.reduce(function (s, c) { return s + c.length; }, 0)), at = 0;
+    parts.forEach(function (c) { out.set(c, at); at += c.length; });
+    return out;
+  }
+  function xmlEsc(s) {
+    return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function colName(i) {
+    var s = '';
+    for (i = i + 1; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s;
+    return s;
+  }
+  function colIndex(ref) {
+    var m = /^([A-Z]+)/.exec(String(ref || '').toUpperCase()), n = 0;
+    if (!m) return -1;
+    for (var i = 0; i < m[1].length; i++) n = n * 26 + (m[1].charCodeAt(i) - 64);
+    return n - 1;
+  }
+  var XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  var NS_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  var NS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  var NS_PKG = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  function buildXlsx(rows) {
+    var width = rows[0].length;
+    var sheet = XML_HEAD + '<worksheet xmlns="' + NS_MAIN + '"><sheetViews><sheetView workbookViewId="0" rightToLeft="1"/></sheetViews><cols>';
+    for (var c = 0; c < width; c++) {
+      var w = c < 5 ? 18 : (c >= 5 + TOTAL * 3 ? 30 : ((c - 5) % 3 === 2 ? 40 : 22));
+      sheet += '<col min="' + (c + 1) + '" max="' + (c + 1) + '" width="' + w + '" customWidth="1"/>';
+    }
+    sheet += '</cols><sheetData>';
+    rows.forEach(function (row, r) {
+      sheet += '<row r="' + (r + 1) + '">';
+      row.forEach(function (v, ci) {
+        if (v === '' || v == null) return;
+        var ref = colName(ci) + (r + 1);
+        if (typeof v === 'number' && isFinite(v)) sheet += '<c r="' + ref + '"><v>' + v + '</v></c>';
+        else sheet += '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(v) + '</t></is></c>';
+      });
+      sheet += '</row>';
+    });
+    sheet += '</sheetData></worksheet>';
+    return zipStore([
+      { name: '[Content_Types].xml', text: XML_HEAD + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' },
+      { name: '_rels/.rels', text: XML_HEAD + '<Relationships xmlns="' + NS_PKG + '"><Relationship Id="rId1" Type="' + NS_REL + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name: 'xl/workbook.xml', text: XML_HEAD + '<workbook xmlns="' + NS_MAIN + '" xmlns:r="' + NS_REL + '"><bookViews><workbookView/></bookViews><sheets><sheet name="Patients" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+      { name: 'xl/_rels/workbook.xml.rels', text: XML_HEAD + '<Relationships xmlns="' + NS_PKG + '"><Relationship Id="rId1" Type="' + NS_REL + '/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
+      { name: 'xl/worksheets/sheet1.xml', text: sheet }
+    ]);
+  }
+
+  function readZip(buf) {
+    var dv = new DataView(buf), i = buf.byteLength - 22;
+    while (i >= 0 && dv.getUint32(i, true) !== 0x06054b50) i--;
+    if (i < 0) throw new Error('zip');
+    var count = dv.getUint16(i + 10, true), off = dv.getUint32(i + 16, true);
+    var dec = new TextDecoder(), out = {};
+    for (var k = 0; k < count; k++) {
+      if (dv.getUint32(off, true) !== 0x02014b50) throw new Error('zip');
+      var method = dv.getUint16(off + 10, true), csize = dv.getUint32(off + 20, true);
+      var nlen = dv.getUint16(off + 28, true), elen = dv.getUint16(off + 30, true), clen = dv.getUint16(off + 32, true);
+      var lho = dv.getUint32(off + 42, true);
+      var name = dec.decode(new Uint8Array(buf, off + 46, nlen));
+      var start = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+      out[name] = { method: method, bytes: new Uint8Array(buf, start, csize) };
+      off += 46 + nlen + elen + clen;
+    }
+    return out;
+  }
+  function entryText(e) {
+    if (!e) return Promise.resolve('');
+    if (e.method === 0) return Promise.resolve(new TextDecoder().decode(e.bytes));
+    if (e.method === 8 && typeof DecompressionStream === 'function') {
+      // A file that was opened and saved again in Excel comes back compressed.
+      var stream = new Blob([e.bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return new Response(stream).text();
+    }
+    return Promise.reject(new Error('compression'));
+  }
+  function textOf(node) {
+    var out = '', ts = node.getElementsByTagName('t');
+    for (var i = 0; i < ts.length; i++) {
+      if (ts[i].parentNode && ts[i].parentNode.localName === 'rPh') continue;
+      out += ts[i].textContent;
+    }
+    return out;
+  }
+  function readXlsx(buf) {
+    var zip = readZip(buf);
+    var sheetName = Object.keys(zip).filter(function (n) { return /^xl\/worksheets\/[^\/]+\.xml$/i.test(n); }).sort()[0];
+    if (!sheetName) return Promise.reject(new Error('sheet'));
+    return Promise.all([entryText(zip[sheetName]), entryText(zip['xl/sharedStrings.xml'])]).then(function (t) {
+      var parser = new DOMParser(), shared = [];
+      if (t[1]) {
+        var items = parser.parseFromString(t[1], 'application/xml').getElementsByTagName('si');
+        for (var s = 0; s < items.length; s++) shared.push(textOf(items[s]));
+      }
+      var rowEls = parser.parseFromString(t[0], 'application/xml').getElementsByTagName('row'), rows = [];
+      for (var r = 0; r < rowEls.length; r++) {
+        var ri = parseInt(rowEls[r].getAttribute('r'), 10);
+        ri = isNaN(ri) ? r : ri - 1;
+        var row = rows[ri] || (rows[ri] = []);
+        var cells = rowEls[r].getElementsByTagName('c');
+        for (var c = 0; c < cells.length; c++) {
+          var cell = cells[c], ci = colIndex(cell.getAttribute('r'));
+          if (ci < 0) ci = c;
+          var type = cell.getAttribute('t'), vEl = cell.getElementsByTagName('v')[0], v = vEl ? vEl.textContent : '';
+          if (type === 's') row[ci] = shared[parseInt(v, 10)] || '';
+          else if (type === 'inlineStr') row[ci] = textOf(cell);
+          else row[ci] = v;
+        }
+      }
+      return rows;
+    });
+  }
+
+  // One row per patient: the shape a general database can take in as-is.
+  function buildRows(list) {
+    var head = [FIRST_HEAD, 'מלווה', 'נפתח', 'עודכן', 'שלבים שנסגרו (מתוך ' + TOTAL + ')'];
+    STEPS.forEach(function (st, i) {
+      var n = i + 1;
+      head.push(n + '. ' + st.title, n + '. מועד סימון', n + '. הערה');
+    });
+    head.push('מזהה רשומה', 'חותמת עדכון');
+    var rows = [head];
+    list.forEach(function (x) {
+      var row = [x.p.code, companionOf(x.p), stamp(x.p.createdAt), stamp(x.p.updatedAt), x.n];
+      STEPS.forEach(function (st) {
+        var s = stepState(x.p, st.id);
+        row.push(s.done ? ST_DONE : (s.na ? ST_NA : ''), s.done ? stamp(s.doneAt) : '', s.note.trim());
+      });
+      row.push(x.id, validDate(x.p.updatedAt) ? x.p.updatedAt : '');
+      rows.push(row);
+    });
+    return rows;
+  }
+  function cellText(v) { return v == null ? '' : String(v); }
+  function rowsToPatients(rows) {
+    var head = rows[0] || [];
+    if (cellText(head[0]).trim() !== FIRST_HEAD) throw new Error('format');
+    var idCol = 5 + TOTAL * 3, isoCol = idCol + 1, out = [];
+    for (var r = 1; r < rows.length; r++) {
+      var row = rows[r] || [];
+      var code = cellText(row[0]).trim();
+      if (!code) continue;
+      var created = parseStamp(row[2]);
+      var iso = cellText(row[isoCol]).trim();
+      var updated = (validDate(iso) ? iso : '') || parseStamp(row[3]) || created || new Date().toISOString();
+      var p = { code: code.slice(0, 40), companion: cellText(row[1]).trim().slice(0, 60), createdAt: created || updated, updatedAt: updated, source: 'import', steps: {} };
+      STEPS.forEach(function (st, i) {
+        var c = 5 + i * 3, status = cellText(row[c]).trim(), note = cellText(row[c + 2]), s = {};
+        if (status === ST_DONE) { s.done = true; s.doneAt = parseStamp(row[c + 1]) || null; }
+        else if (status === ST_NA) s.na = true;
+        if (note.trim()) s.note = note.slice(0, 4000);
+        if (Object.keys(s).length) p.steps[st.id] = s;
+      });
+      var id = cellText(row[idCol]).trim();
+      if (!ID_RE.test(id)) {
+        // No record id (the file was edited by hand): key the row by code and companion.
+        var h = 5381, key = code + '|' + p.companion;
+        for (var k = 0; k < key.length; k++) h = ((h * 33) ^ key.charCodeAt(k)) >>> 0;
+        id = 'pimport' + h.toString(36);
+      }
+      out.push({ id: id, p: p });
+    }
+    return out;
+  }
+
+  function contentKey(p) {
+    return JSON.stringify([p.code, companionOf(p), STEPS.map(function (st) { var s = stepState(p, st.id); return [s.done, s.na, stamp(s.doneAt), s.note.trim()]; })]);
+  }
+  function mergeIn(list) {
+    var c = { added: 0, updated: 0, same: 0 };
+    list.forEach(function (x) {
+      var cur = data[x.id];
+      if (!cur) { data[x.id] = x.p; c.added++; }
+      else if (String(x.p.updatedAt) > String(cur.updatedAt || '')) { data[x.id] = x.p; c.updated++; }
+      // Same timestamp but different content: the file was corrected by hand in Excel.
+      else if (cur.source === 'import' && String(x.p.updatedAt) === String(cur.updatedAt || '') && contentKey(x.p) !== contentKey(cur)) { data[x.id] = x.p; c.updated++; }
+      else c.same++;
+    });
+    return c;
+  }
+
+  // ---------- database file: one Excel file the study manager owns ----------
+  // In Edge and Chrome on a computer the page can keep writing into a file the manager picked,
+  // so the data lives in a normal file that can be moved, backed up or opened in Excel.
+  var FS_OK = typeof window.showOpenFilePicker === 'function' && typeof window.showSaveFilePicker === 'function';
+  var PICK_TYPES = [{ description: 'Excel', accept: (function () { var o = {}; o[XLSX_MIME] = ['.xlsx']; return o; })() }];
+  var dbHandle = null, dbRemembered = null, dbSavedAt = '', dbError = '', dbTimer = 0, dbChain = Promise.resolve();
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open('patient-check-list', 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore('kv'); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction('kv', mode), rq;
+        try { rq = fn(tx.objectStore('kv')); } catch (e) { reject(e); return; }
+        tx.oncomplete = function () { resolve(rq && rq.result); };
+        tx.onerror = function () { reject(tx.error); };
+      };
+    });
+  }
+  function renderDbBar() {
+    var bar = $('db-bar'), overview = route === 'table' || route === 'dashboard';
+    bar.hidden = !FS_OK || !overview;
+    if (bar.hidden) return;
+    var resume = $('db-resume'), text;
+    resume.hidden = !!dbHandle || !dbRemembered;
+    if (dbRemembered) resume.textContent = 'המשך עם ' + dbRemembered.name;
+    $('db-save').hidden = !(dbHandle && dbError);
+    if (dbError) text = dbError;
+    else if (dbHandle) text = 'מחובר לקובץ ' + dbHandle.name + '. כל שינוי נשמר בו אוטומטית' + (dbSavedAt ? ', נשמר לאחרונה ' + when(dbSavedAt) : '') + '.';
+    else if (dbRemembered) text = 'בפעם הקודמת עבדתם עם הקובץ ' + dbRemembered.name + '. לחצו כדי להמשיך איתו.';
+    else text = 'עוד לא נבחר קובץ, והנתונים נשמרים רק בדפדפן הזה. בחרו קובץ אקסל אחד שבו הכול יישמר, למשל בתיקיית OneDrive של המחקר.';
+    var st = $('db-status');
+    st.textContent = text;
+    st.className = 'hint' + (dbError ? ' error' : '');
+  }
+  function saveDbNow() {
+    clearTimeout(dbTimer);
+    dbTimer = 0;
+    if (!dbHandle) return Promise.resolve();
+    var h = dbHandle;
+    dbChain = dbChain.then(function () {
+      var bytes = buildXlsx(buildRows(allPeople()));
+      return h.createWritable().then(function (w) {
+        return w.write(bytes).then(function () { return w.close(); });
+      });
+    }).then(function () {
+      dbSavedAt = new Date().toISOString();
+      dbError = '';
+      renderDbBar();
+    }, function () {
+      dbError = 'השמירה לקובץ המאגר נכשלה. אם הקובץ פתוח באקסל, סגרו אותו ולחצו "שמירה עכשיו".';
+      renderDbBar();
+    });
+    return dbChain;
+  }
+  function connectDb(h, isNew) {
+    var load = isNew ? Promise.resolve([]) : h.getFile().then(function (f) { return f.arrayBuffer(); }).then(function (buf) {
+      return buf.byteLength ? readXlsx(buf).then(rowsToPatients) : [];
+    });
+    return load.then(function (list) {
+      mergeIn(list);
+      dbHandle = h; dbRemembered = null; dbError = '';
+      idb('readwrite', function (s) { return s.put(h, 'db'); }).catch(function () {});
+      persist();
+      render();
+      return saveDbNow();
+    }).then(function () {
+      if (!dbError) toast((isNew ? 'נוצר קובץ מאגר: ' : 'קובץ המאגר נפתח: ') + h.name + ' · ' + Object.keys(data).length + ' מטופלים');
+    }, function () {
+      dbError = 'לא ניתן לקרוא את הקובץ. ודאו שזה קובץ מאגר של Patient Check List ושהוא לא פתוח באקסל.';
+      renderDbBar();
+    });
+  }
+  function askWrite(h) {
+    return typeof h.requestPermission === 'function' ? h.requestPermission({ mode: 'readwrite' }) : Promise.resolve('granted');
+  }
+
+  function fileFor(list, tag) {
+    var name = 'patient-check-list-' + tag + '-' + today() + '.xlsx';
+    return new File([buildXlsx(buildRows(list))], name, { type: XLSX_MIME });
+  }
+  function download(file) {
+    var url = URL.createObjectURL(file), a = document.createElement('a');
+    a.href = url; a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+  }
+  function markSent(list) {
+    var now = new Date().toISOString();
+    list.forEach(function (x) { if (data[x.id] && data[x.id].source !== 'import') data[x.id].sentAt = now; });
+    persist();
+    render();
+  }
+  function send(list, tag) {
+    if (!list.length) return;
+    flushPersist();
+    var file = fileFor(list, tag), canShare = false;
+    try { canShare = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { canShare = false; }
+    if (!canShare) {
+      download(file);
+      markSent(list);
+      toast('הקובץ ירד למכשיר. צרפו אותו להודעה למנהל המחקר.');
+      return;
+    }
+    navigator.share({ files: [file], title: 'Patient Check List' }).then(function () {
+      markSent(list);
+      toast('הקובץ הועבר לאפליקציה שבחרתם. ודאו שההודעה נשלחה.');
+    }, function (err) {
+      if (err && err.name === 'AbortError') { toast('השליחה בוטלה.'); return; }
+      download(file);
+      markSent(list);
+      toast('הקובץ ירד למכשיר. צרפו אותו להודעה למנהל המחקר.');
+    });
+  }
+  function fileTag(code) { return String(code).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) || 'patient'; }
+
+  var toastTimer = 0;
+  function toast(text) {
+    var t = $('toast');
+    clearTimeout(toastTimer);
+    t.textContent = text;
+    t.hidden = !text;
+    if (text) toastTimer = setTimeout(function () { t.hidden = true; }, 6000);
+  }
+
+  // ---------- routing ----------
+  var route = readHash();
+  var backTo = null;
+  var detailFor = null;
+  var stepEls = {};
+  function readHash() {
+    var h = '';
+    try { h = (location.hash || '').replace(/^#/, ''); } catch (e) {}
+    if (h === 'table' || h === 'dashboard') return h;
+    return ID_RE.test(h) ? h : null;
+  }
+  function go(id) {
+    flushPersist();
+    route = id || null;
+    try { location.hash = id || ''; } catch (e) {}
+    render();
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
+  window.addEventListener('hashchange', function () {
+    var r = readHash();
+    if (r !== route) { route = r; render(); }
+  });
+
+  // ---------- rendering ----------
+  function render() {
+    if (IS_MANAGER) { if (!route) route = 'dashboard'; }
+    else if (route === 'table' || route === 'dashboard') route = null;
+    var isTable = route === 'table', isDash = route === 'dashboard', overview = isTable || isDash;
+    if (route && !overview && !data[route]) route = null;
+    var showDetail = !!route && !overview;
+    var current = isTable ? 'table' : (isDash ? 'dashboard' : '');
+    $('banner-store').hidden = canStore;
+    $('app').classList.toggle('wide', overview);
+    $('top').hidden = showDetail;
+    all$('.tab').forEach(function (t) {
+      if (t.getAttribute('data-view') === current) t.setAttribute('aria-current', 'page');
+      else t.removeAttribute('aria-current');
+    });
+    $('view-list').hidden = showDetail || overview;
+    $('view-detail').hidden = !showDetail;
+    $('view-table').hidden = !isTable;
+    $('view-dash').hidden = !isDash;
+    all$('.js-export').forEach(function (b) { b.hidden = Object.keys(data).length === 0; });
+    renderDbBar();
+    if (isTable) { detailFor = null; renderTable(); }
+    else if (isDash) { detailFor = null; renderDash(); }
+    else if (showDetail) { if (detailFor !== route) buildDetail(route); syncDetail(); }
+    else { detailFor = null; renderList(); }
+  }
+
+  function renderList() {
+    var list = $('people'), status = $('list-status'), empty = $('empty');
+    var all = allPeople();
+    $('list-head').hidden = all.length === 0;
+    $('list-title').textContent = 'מטופלים במכשיר הזה (' + all.length + ')';
+    $('send-all').hidden = !all.some(function (x) { return x.p.source !== 'import'; });
+    $('search-box').hidden = all.length <= 5;
+    var q = all.length > 5 ? $('search').value.trim().toLowerCase() : '';
+    var shown = all.filter(function (x) { return !q || x.p.code.toLowerCase().indexOf(q) !== -1; });
+    empty.hidden = all.length !== 0;
+    list.hidden = shown.length === 0;
+    status.hidden = !(all.length !== 0 && shown.length === 0);
+    status.textContent = 'אין מטופל עם הקוד הזה.';
+
+    list.textContent = '';
+    shown.forEach(function (x) {
+      var li = el('li'), a = el('a', 'row');
+      a.href = '#' + x.id;
+      a.addEventListener('click', function (ev) { ev.preventDefault(); backTo = null; go(x.id); });
+      var code = el('span', 'row-code', x.p.code); code.dir = 'ltr';
+      var count;
+      if (x.n >= TOTAL) count = el('span', 'pill-done', 'הושלם');
+      else { count = el('span', 'row-count', x.n + '/' + TOTAL); count.dir = 'ltr'; }
+      var segs = el('div', 'segs'); segs.setAttribute('role', 'img');
+      fillSegs(segs, x.p);
+      var meta = el('div', 'row-meta'), comp = companionOf(x.p), st = sendState(x.p);
+      meta.appendChild(el('span', '', comp ? 'מלווה: ' + comp : 'לא נרשם מלווה'));
+      meta.appendChild(el('span', st.pending ? 'unsent' : '', st.text));
+      a.appendChild(code); a.appendChild(count); a.appendChild(segs); a.appendChild(meta);
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+  }
+
+  var CHECK = '<svg class="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>' +
+              '<svg class="i-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M7 12h10"></path></svg>';
+  var MARK = '<span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>';
+
+  function autosize(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = Math.max(44, ta.scrollHeight + 2) + 'px';
+  }
+  function touch(p, soon) {
+    p.updatedAt = new Date().toISOString();
+    if (soon) persistSoon(); else persist();
+  }
+  function patchStep(sid, fields, soon) {
+    var p = data[route];
+    if (!p) return;
+    if (!isObj(p.steps)) p.steps = {};
+    p.steps[sid] = Object.assign({}, isObj(p.steps[sid]) ? p.steps[sid] : {}, fields);
+    touch(p, soon);
+    syncDetail();
+  }
+
+  function buildDetail(id) {
+    var list = $('steps');
+    list.textContent = '';
+    stepEls = {};
+    detailFor = id;
+    $('del-confirm').hidden = true;
+    $('del').hidden = false;
+    $('save').textContent = '';
+
+    STEPS.forEach(function (st, i) {
+      var li = el('li', 'step');
+      var head = el('button', 'step-head');
+      head.type = 'button';
+      head.setAttribute('role', 'checkbox');
+      var box = el('span', 'box'); box.innerHTML = CHECK;
+      var body = el('span', 'step-body');
+      var eyebrow = el('span', 'step-eyebrow');
+      eyebrow.appendChild(el('span', 'step-num', 'שלב ' + (i + 1)));
+      if (st.where) eyebrow.appendChild(el('span', 'tag', st.where));
+      body.appendChild(eyebrow);
+      body.appendChild(el('span', 'step-title', st.title));
+      if (st.hint) body.appendChild(el('span', 'step-hint', st.hint));
+      var meta = el('span', 'step-meta'); meta.hidden = true;
+      body.appendChild(meta);
+      head.appendChild(box); head.appendChild(body);
+      head.addEventListener('click', function () {
+        var s = stepState(data[route], st.id);
+        if (s.done) patchStep(st.id, { done: false, doneAt: null });
+        else patchStep(st.id, { done: true, na: false, doneAt: new Date().toISOString() });
+      });
+      li.appendChild(head);
+
+      var extra = el('div', 'step-extra'), na = null;
+      if (st.naLabel) {
+        na = el('button', 'chip', st.naLabel);
+        na.type = 'button';
+        na.addEventListener('click', function () {
+          var s = stepState(data[route], st.id);
+          if (s.na) patchStep(st.id, { na: false });
+          else patchStep(st.id, { na: true, done: false, doneAt: null });
+        });
+        extra.appendChild(na);
+      }
+      var lab = el('label', 'vh', 'הערה לשלב ' + (i + 1) + ': ' + st.title);
+      lab.htmlFor = 'note-' + st.id;
+      var ta = el('textarea', 'note');
+      ta.id = 'note-' + st.id;
+      ta.rows = 1; ta.dir = 'auto'; ta.maxLength = 4000; ta.placeholder = 'הערה';
+      ta.addEventListener('input', function () { autosize(ta); patchStep(st.id, { note: ta.value }, true); });
+      ta.addEventListener('blur', flushPersist);
+      extra.appendChild(lab); extra.appendChild(ta);
+      li.appendChild(extra);
+      list.appendChild(li);
+      stepEls[st.id] = { li: li, head: head, meta: meta, na: na, ta: ta };
+    });
+  }
+
+  function syncDetail() {
+    var p = data[route];
+    if (!p) return;
+    $('d-code').textContent = p.code;
+    var n = fillSegs($('d-segs'), p);
+    $('d-count').textContent = n >= TOTAL ? 'כל השלבים הושלמו' : n + ' מתוך ' + TOTAL;
+    var dc = $('d-companion'), cv = typeof p.companion === 'string' ? p.companion : '';
+    if (document.activeElement !== dc && dc.value !== cv) dc.value = cv;
+    STEPS.forEach(function (st) {
+      var s = stepState(p, st.id), r = stepEls[st.id];
+      if (!r) return;
+      r.li.dataset.state = s.done ? 'done' : (s.na ? 'na' : 'open');
+      r.head.setAttribute('aria-checked', s.done ? 'true' : 'false');
+      if (s.done) { var t = when(s.doneAt); r.meta.textContent = t ? 'סומן ' + t : 'סומן'; r.meta.hidden = false; }
+      else if (s.na) { r.meta.textContent = ST_NA; r.meta.hidden = false; }
+      else r.meta.hidden = true;
+      if (r.na) r.na.setAttribute('aria-pressed', s.na ? 'true' : 'false');
+      if (document.activeElement !== r.ta && r.ta.value !== s.note) r.ta.value = s.note;
+      autosize(r.ta);
+    });
+    var st2 = sendState(p), sent = $('sent-status');
+    sent.textContent = st2.text + (st2.pending && n < TOTAL ? '. אפשר לשלוח גם לפני שכל השלבים הושלמו.' : '.');
+    sent.className = 'hint' + (st2.pending ? ' unsent' : '');
+  }
+
+  function renderTable() {
+    var all = allPeople();
+    var finished = all.filter(function (x) { return x.n >= TOTAL; }).length;
+    $('t-count').textContent = all.length ? all.length + ' מטופלים · ' + finished + ' הושלמו' : '';
+    $('track-wrap').hidden = all.length === 0;
+    $('legend').hidden = all.length === 0;
+    $('table-key').hidden = all.length === 0;
+    $('table-status').hidden = all.length !== 0;
+
+    var tb = $('track-body');
+    tb.textContent = '';
+    all.forEach(function (x) {
+      var tr = el('tr');
+      var th = el('th', 'c-code'); th.scope = 'row';
+      var a = el('a', '', x.p.code); a.href = '#' + x.id; a.dir = 'ltr';
+      th.appendChild(a);
+      tr.appendChild(th);
+      tr.appendChild(el('td', 'c-text', companionOf(x.p) || '—'));
+      STEPS.forEach(function (st, i) {
+        var s = stepState(x.p, st.id), note = s.note.trim();
+        var td = el('td', 'c-step' + (note ? ' has-note' : ''));
+        if (s.done) td.innerHTML = MARK;
+        else if (s.na) { var d = el('span', 'mark-na', '–'); d.setAttribute('aria-hidden', 'true'); td.appendChild(d); }
+        td.appendChild(el('span', 'vh', 'שלב ' + (i + 1) + ': ' + (s.done ? ST_DONE : (s.na ? ST_NA : 'פתוח')) + (note ? ', יש הערה' : '')));
+        if (note) td.title = note;
+        tr.appendChild(td);
+      });
+      tr.appendChild(el('td', 'c-text', when(x.p.updatedAt || x.p.createdAt)));
+      tr.addEventListener('click', function (ev) { ev.preventDefault(); backTo = 'table'; go(x.id); });
+      tb.appendChild(tr);
+    });
+  }
+
+  function renderDash() {
+    var all = allPeople(), total = all.length;
+    $('dash').hidden = total === 0;
+    $('dash-status').hidden = total !== 0;
+    if (!total) return;
+
+    var finished = 0, notStarted = 0;
+    all.forEach(function (x) { if (x.n >= TOTAL) finished++; else if (x.n === 0) notStarted++; });
+    var open = total - finished;
+
+    var tiles = $('tiles');
+    tiles.textContent = '';
+    [
+      { label: 'מטופלים', value: total, sub: 'נפתחו בסך הכול' },
+      { label: 'סיימו', value: finished, sub: Math.round(finished / total * 100) + '% מהמטופלים' },
+      { label: 'לא סיימו', value: open, sub: !open ? 'אין מטופלים פתוחים' : (notStarted ? 'מהם ' + notStarted + ' טרם התחילו' : 'כולם כבר התחילו') }
+    ].forEach(function (t) {
+      var d = el('div', 'tile');
+      d.appendChild(el('span', 'tile-label', t.label));
+      d.appendChild(el('span', 'tile-value', String(t.value)));
+      d.appendChild(el('span', 'tile-sub', t.sub));
+      tiles.appendChild(d);
+    });
+
+    var bars = $('step-bars');
+    bars.textContent = '';
+    STEPS.forEach(function (st, i) {
+      var done = 0, na = 0;
+      all.forEach(function (x) { var s = stepState(x.p, st.id); if (s.done) done++; else if (s.na) na++; });
+      var row = el('div', 'bar-row');
+      row.title = done + ' מתוך ' + total + ' מטופלים ביצעו את השלב' + (na ? ', ' + na + ' לא רלוונטי' : '');
+      var head = el('div', 'bar-head'), name = el('span', 'bar-name');
+      name.appendChild(el('span', 'n', String(i + 1)));
+      name.appendChild(el('span', '', st.title));
+      var val = el('span', 'bar-val', done + '/' + total); val.dir = 'ltr';
+      head.appendChild(name); head.appendChild(val);
+      var track = el('div', 'bar-track'), fill = el('div', 'bar-fill');
+      fill.style.width = (done / total * 100) + '%';
+      fill.hidden = !done;
+      track.appendChild(fill);
+      row.appendChild(head); row.appendChild(track);
+      if (na) row.appendChild(el('span', 'bar-note', na + ' ' + ST_NA));
+      bars.appendChild(row);
+    });
+
+    var openPeople = all.filter(function (x) { return x.n < TOTAL; });
+    var ol = $('open-list');
+    ol.textContent = '';
+    ol.hidden = openPeople.length === 0;
+    $('open-none').hidden = openPeople.length !== 0;
+    openPeople.slice(0, 30).forEach(function (x) {
+      var missing = [];
+      STEPS.forEach(function (st, i) { var s = stepState(x.p, st.id); if (!s.done && !s.na) missing.push(i + 1); });
+      var li = el('li'), a = el('a', 'open-row');
+      a.href = '#' + x.id;
+      a.addEventListener('click', function (ev) { ev.preventDefault(); backTo = 'dashboard'; go(x.id); });
+      var code = el('span', 'row-code', x.p.code); code.dir = 'ltr';
+      var comp = companionOf(x.p);
+      a.appendChild(code);
+      a.appendChild(el('span', 'open-comp', comp ? 'מלווה: ' + comp : 'לא נרשם מלווה'));
+      a.appendChild(el('span', 'open-miss', (missing.length === 1 ? 'חסר שלב ' : 'חסרים שלבים ') + missing.join(', ')));
+      li.appendChild(a);
+      ol.appendChild(li);
+    });
+    var more = $('open-more');
+    more.hidden = openPeople.length <= 30;
+    more.textContent = openPeople.length > 30 ? 'ועוד ' + (openPeople.length - 30) + ' מטופלים. הרשימה המלאה בלשונית הטבלה.' : '';
+
+    var groups = new Map();
+    all.forEach(function (x) {
+      var name = companionOf(x.p), key = name.toLowerCase(), g = groups.get(key);
+      if (!g) { g = { name: name || 'לא נרשם', count: 0, done: 0 }; groups.set(key, g); }
+      g.count++;
+      if (x.n >= TOTAL) g.done++;
+    });
+    var list = [];
+    groups.forEach(function (g) { list.push(g); });
+    list.sort(function (a, b) { return b.count - a.count; });
+    var cb = $('comp-body');
+    cb.textContent = '';
+    list.forEach(function (g) {
+      var tr = el('tr'), th = el('th', '', g.name);
+      th.scope = 'row';
+      tr.appendChild(th);
+      tr.appendChild(el('td', '', String(g.count)));
+      tr.appendChild(el('td', '', String(g.done)));
+      cb.appendChild(tr);
+    });
+  }
+
+  // ---------- actions ----------
+  function addError(msg) {
+    var e = $('add-error');
+    e.textContent = msg || '';
+    e.hidden = !msg;
+  }
+  $('add-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var input = $('new-code'), compInput = $('new-companion');
+    var code = input.value.trim().replace(/\s+/g, ' ');
+    var companion = compInput.value.trim().replace(/\s+/g, ' ');
+    if (!companion) { addError('הקלידו את שם המלווה.'); compInput.focus(); return; }
+    if (!code) { addError('הקלידו קוד מטופל.'); input.focus(); return; }
+    var dup = Object.keys(data).some(function (id) { return data[id].code.toLowerCase() === code.toLowerCase(); });
+    if (dup) { addError('הקוד הזה כבר ברשימה במכשיר הזה.'); input.focus(); return; }
+    addError('');
+    var id = newId(), now = new Date().toISOString();
+    data[id] = { code: code, companion: companion, createdAt: now, updatedAt: now, steps: {} };
+    persist();
+    input.value = '';
+    backTo = null;
+    go(id);
+  });
+  $('new-code').addEventListener('input', function () { addError(''); });
+  $('new-companion').addEventListener('input', function () { addError(''); });
+  $('search').addEventListener('input', renderList);
+
+  $('d-companion').addEventListener('input', function () {
+    var p = data[route];
+    if (!p) return;
+    p.companion = this.value;
+    touch(p, true);
+  });
+  $('d-companion').addEventListener('blur', flushPersist);
+
+  all$('.tab').forEach(function (t) {
+    t.addEventListener('click', function () { backTo = null; go(t.getAttribute('data-view') || null); });
+  });
+  $('back').addEventListener('click', function () { go(backTo); });
+
+  $('send-one').addEventListener('click', function () {
+    var p = data[route];
+    if (p) send([{ id: route, p: p, n: resolved(p) }], fileTag(p.code));
+  });
+  $('download-one').addEventListener('click', function () {
+    var p = data[route];
+    if (!p) return;
+    flushPersist();
+    download(fileFor([{ id: route, p: p, n: resolved(p) }], fileTag(p.code)));
+    toast('הקובץ ירד למכשיר.');
+  });
+  $('send-all').addEventListener('click', function () {
+    send(allPeople().filter(function (x) { return x.p.source !== 'import'; }), 'all');
+  });
+  all$('.js-export').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var all = allPeople();
+      if (!all.length) return;
+      download(fileFor(all, 'all'));
+      toast('קובץ האקסל ירד למכשיר: ' + all.length + ' מטופלים.');
+    });
+  });
+  all$('.js-import').forEach(function (b) {
+    b.addEventListener('click', function () { $('import-file').click(); });
+  });
+  $('import-file').addEventListener('change', function () {
+    var files = Array.prototype.slice.call(this.files || []);
+    this.value = '';
+    if (!files.length) return;
+    var added = 0, updated = 0, same = 0, bad = 0;
+    files.reduce(function (chain, f) {
+      return chain.then(function () {
+        return f.arrayBuffer().then(readXlsx).then(function (rows) {
+          var c = mergeIn(rowsToPatients(rows));
+          added += c.added; updated += c.updated; same += c.same;
+        }).catch(function () { bad++; });
+      });
+    }, Promise.resolve()).then(function () {
+      persist();
+      render();
+      var parts = [];
+      if (added) parts.push('נוספו ' + added + ' מטופלים');
+      if (updated) parts.push('עודכנו ' + updated);
+      if (same) parts.push(same + ' כבר היו מעודכנים');
+      if (bad) parts.push(bad + ' קבצים לא נקראו');
+      toast(parts.join(' · ') || 'לא נמצאו מטופלים בקבצים.');
+    });
+  });
+
+  $('db-open').addEventListener('click', function () {
+    window.showOpenFilePicker({ types: PICK_TYPES }).then(function (hs) {
+      var h = hs[0];
+      return askWrite(h).then(function (p) {
+        if (p !== 'granted') { toast('בלי הרשאת שמירה אי אפשר לעבוד מול הקובץ.'); return; }
+        return connectDb(h, false);
+      });
+    }).catch(function () {});
+  });
+  $('db-new').addEventListener('click', function () {
+    window.showSaveFilePicker({ suggestedName: 'patient-check-list-db.xlsx', types: PICK_TYPES }).then(function (h) {
+      return connectDb(h, true);
+    }).catch(function () {});
+  });
+  $('db-resume').addEventListener('click', function () {
+    var h = dbRemembered;
+    if (!h) return;
+    askWrite(h).then(function (p) {
+      if (p !== 'granted') { toast('בלי הרשאת שמירה אי אפשר לעבוד מול הקובץ.'); return; }
+      return connectDb(h, false);
+    }).catch(function () {
+      dbError = 'הקובץ הקודם לא נמצא. ייתכן שהועבר או נמחק; פתחו אותו מחדש מהמקום החדש.';
+      dbRemembered = null;
+      renderDbBar();
+    });
+  });
+  $('db-save').addEventListener('click', saveDbNow);
+
+  $('del').addEventListener('click', function () {
+    $('del').hidden = true;
+    $('del-confirm').hidden = false;
+    $('del-no').focus();
+  });
+  $('del-no').addEventListener('click', function () {
+    $('del-confirm').hidden = true;
+    $('del').hidden = false;
+  });
+  $('del-yes').addEventListener('click', function () {
+    if (!route || !data[route]) return;
+    delete data[route];
+    persist();
+    go(backTo);
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') flushPersist();
+  });
+  window.addEventListener('pagehide', flushPersist);
+
+  // ---------- start ----------
+  ['protocol', 'table-key'].forEach(function (listId) {
+    var ol = $(listId);
+    STEPS.forEach(function (st, i) {
+      var li = el('li');
+      li.appendChild(el('span', 'n', String(i + 1)));
+      li.appendChild(el('span', 't', st.title));
+      if (st.where) li.appendChild(el('span', 'tag', st.where));
+      ol.appendChild(li);
+    });
+  });
+  (function fillTableHead() {
+    var tr = $('track-head');
+    var c = el('th', 'c-code', 'קוד'); c.scope = 'col'; tr.appendChild(c);
+    var m = el('th', 'c-text', 'מלווה'); m.scope = 'col'; tr.appendChild(m);
+    STEPS.forEach(function (st, i) {
+      var th = el('th', 'c-step', String(i + 1));
+      th.scope = 'col'; th.title = st.title;
+      th.appendChild(el('span', 'vh', ' ' + st.title));
+      tr.appendChild(th);
+    });
+    var u = el('th', 'c-text', 'עודכן'); u.scope = 'col'; tr.appendChild(u);
+    $('legend-mark').innerHTML = MARK;
+  })();
+
+  if (IS_MANAGER) {
+    document.title = 'Patient Check List Manager';
+    $('eyebrow').textContent = 'מנהל המחקר: מעקב אחרי כל המטופלים';
+    document.querySelector('.tab[data-view=""]').hidden = true;
+    $('send-box').hidden = true;
+    $('dash-hint').textContent = 'מייבאים לכאן את קובצי האקסל שהמלווים שלחו. הנתונים מצטברים, ואפשר לשמור אותם בקובץ מאגר אחד.';
+  } else {
+    $('tabs').hidden = true;
+  }
+  load();
+  render();
+  if (FS_OK) {
+    idb('readonly', function (s) { return s.get('db'); }).then(function (h) {
+      if (h && h.name && !dbHandle) { dbRemembered = h; renderDbBar(); }
+    }).catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
