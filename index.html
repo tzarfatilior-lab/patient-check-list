@@ -97,7 +97,8 @@
 
   .tabs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 4px;
     padding: 4px;
     margin-top: 10px;
@@ -187,6 +188,14 @@
     display: inline-block; font-size: 12px; font-weight: 500; line-height: 1.5; padding: 0 8px;
     border: 1px solid var(--line); border-radius: 999px; color: var(--muted); white-space: nowrap;
   }
+
+  .dbbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px;
+  }
+  .dbbar-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 18rem; min-width: 0; }
+  .dbbar h2 { font-size: 16px; font-weight: 600; }
+  .dbbar .error { font-weight: 500; }
 
   /* ---------- patient view ---------- */
   .dhead {
@@ -353,14 +362,27 @@
   <div class="banner" id="banner-store" hidden>הדפדפן לא מאפשר שמירה במכשיר (למשל בגלישה פרטית). מה שתסמנו יימחק כשהדף ייסגר, אז שלחו את הסיכום לפני הסגירה.</div>
 
   <header class="top" id="top">
-    <p class="eyebrow">ליווי מטופל במחקר</p>
+    <p class="eyebrow" id="eyebrow">ליווי מטופל במחקר</p>
     <h1>Patient Check List</h1>
-    <nav class="tabs" aria-label="תצוגות">
+    <nav class="tabs" id="tabs" aria-label="תצוגות">
       <button type="button" class="tab" data-view="">מילוי</button>
       <button type="button" class="tab" data-view="dashboard">דשבורד</button>
       <button type="button" class="tab" data-view="table">טבלה</button>
     </nav>
   </header>
+
+  <section class="dbbar" id="db-bar" hidden>
+    <div class="dbbar-text">
+      <h2>קובץ המאגר</h2>
+      <p class="hint" id="db-status"></p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn small primary" id="db-resume" hidden></button>
+      <button type="button" class="btn small primary" id="db-save" hidden>שמירה עכשיו</button>
+      <button type="button" class="btn small" id="db-open">פתיחת קובץ קיים</button>
+      <button type="button" class="btn small" id="db-new">קובץ חדש</button>
+    </div>
+  </section>
 
   <!-- ===== companion: fill in ===== -->
   <section class="view" id="view-list">
@@ -408,7 +430,7 @@
         <button type="button" class="btn small primary js-export" hidden>ייצוא לאקסל</button>
       </div>
     </div>
-    <p class="hint">הדשבורד מציג את מה שנשמר או יובא במכשיר הזה. מנהל המחקר מייבא לכאן את קובצי האקסל שהמלווים שלחו.</p>
+    <p class="hint" id="dash-hint">הדשבורד מציג את מה שנשמר או יובא במכשיר הזה. מנהל המחקר מייבא לכאן את קובצי האקסל שהמלווים שלחו.</p>
     <p class="status" id="dash-status" role="status" hidden>עדיין אין נתונים. לחצו על "ייבוא קבצים" ובחרו את הקבצים שקיבלתם מהמלווים.</p>
     <div class="dash" id="dash" hidden>
       <div class="tiles" id="tiles"></div>
@@ -488,7 +510,7 @@
 
     <ol class="panel" id="steps"></ol>
 
-    <div class="send-box">
+    <div class="send-box" id="send-box">
       <h2>סיום ושליחה</h2>
       <p class="hint" id="sent-status"></p>
       <button type="button" class="btn primary" id="send-one">שליחת הסיכום למנהל המחקר</button>
@@ -527,7 +549,10 @@
     { id: 's9', title: 'בדיקת דופלר', where: 'מכון הדופלר' }
   ];
   var TOTAL = STEPS.length;
-  var LS_KEY = 'patient-check-list-v1';
+  // The same source builds two pages: 'companion' (fill in and send) and 'manager' (dashboard and table).
+  var MODE = 'companion';
+  var IS_MANAGER = MODE === 'manager';
+  var LS_KEY = IS_MANAGER ? 'patient-check-list-manager-v1' : 'patient-check-list-v1';
   var XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   var FIRST_HEAD = 'קוד מטופל';
   var ST_DONE = 'בוצע', ST_NA = 'לא רלוונטי';
@@ -596,6 +621,7 @@
     $('banner-store').hidden = canStore;
     var s = $('save');
     s.textContent = canStore ? 'נשמר במכשיר' : 'לא נשמר';
+    if (dbHandle) { clearTimeout(dbTimer); dbTimer = setTimeout(saveDbNow, 800); }
   }
   function persistSoon() {
     clearTimeout(persistTimer);
@@ -861,6 +887,96 @@
   function contentKey(p) {
     return JSON.stringify([p.code, companionOf(p), STEPS.map(function (st) { var s = stepState(p, st.id); return [s.done, s.na, stamp(s.doneAt), s.note.trim()]; })]);
   }
+  function mergeIn(list) {
+    var c = { added: 0, updated: 0, same: 0 };
+    list.forEach(function (x) {
+      var cur = data[x.id];
+      if (!cur) { data[x.id] = x.p; c.added++; }
+      else if (String(x.p.updatedAt) > String(cur.updatedAt || '')) { data[x.id] = x.p; c.updated++; }
+      // Same timestamp but different content: the file was corrected by hand in Excel.
+      else if (cur.source === 'import' && String(x.p.updatedAt) === String(cur.updatedAt || '') && contentKey(x.p) !== contentKey(cur)) { data[x.id] = x.p; c.updated++; }
+      else c.same++;
+    });
+    return c;
+  }
+
+  // ---------- database file: one Excel file the study manager owns ----------
+  // In Edge and Chrome on a computer the page can keep writing into a file the manager picked,
+  // so the data lives in a normal file that can be moved, backed up or opened in Excel.
+  var FS_OK = typeof window.showOpenFilePicker === 'function' && typeof window.showSaveFilePicker === 'function';
+  var PICK_TYPES = [{ description: 'Excel', accept: (function () { var o = {}; o[XLSX_MIME] = ['.xlsx']; return o; })() }];
+  var dbHandle = null, dbRemembered = null, dbSavedAt = '', dbError = '', dbTimer = 0, dbChain = Promise.resolve();
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open('patient-check-list', 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore('kv'); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction('kv', mode), rq;
+        try { rq = fn(tx.objectStore('kv')); } catch (e) { reject(e); return; }
+        tx.oncomplete = function () { resolve(rq && rq.result); };
+        tx.onerror = function () { reject(tx.error); };
+      };
+    });
+  }
+  function renderDbBar() {
+    var bar = $('db-bar'), overview = route === 'table' || route === 'dashboard';
+    bar.hidden = !FS_OK || !overview;
+    if (bar.hidden) return;
+    var resume = $('db-resume'), text;
+    resume.hidden = !!dbHandle || !dbRemembered;
+    if (dbRemembered) resume.textContent = 'המשך עם ' + dbRemembered.name;
+    $('db-save').hidden = !(dbHandle && dbError);
+    if (dbError) text = dbError;
+    else if (dbHandle) text = 'מחובר לקובץ ' + dbHandle.name + '. כל שינוי נשמר בו אוטומטית' + (dbSavedAt ? ', נשמר לאחרונה ' + when(dbSavedAt) : '') + '.';
+    else if (dbRemembered) text = 'בפעם הקודמת עבדתם עם הקובץ ' + dbRemembered.name + '. לחצו כדי להמשיך איתו.';
+    else text = 'עוד לא נבחר קובץ, והנתונים נשמרים רק בדפדפן הזה. בחרו קובץ אקסל אחד שבו הכול יישמר, למשל בתיקיית OneDrive של המחקר.';
+    var st = $('db-status');
+    st.textContent = text;
+    st.className = 'hint' + (dbError ? ' error' : '');
+  }
+  function saveDbNow() {
+    clearTimeout(dbTimer);
+    dbTimer = 0;
+    if (!dbHandle) return Promise.resolve();
+    var h = dbHandle;
+    dbChain = dbChain.then(function () {
+      var bytes = buildXlsx(buildRows(allPeople()));
+      return h.createWritable().then(function (w) {
+        return w.write(bytes).then(function () { return w.close(); });
+      });
+    }).then(function () {
+      dbSavedAt = new Date().toISOString();
+      dbError = '';
+      renderDbBar();
+    }, function () {
+      dbError = 'השמירה לקובץ המאגר נכשלה. אם הקובץ פתוח באקסל, סגרו אותו ולחצו "שמירה עכשיו".';
+      renderDbBar();
+    });
+    return dbChain;
+  }
+  function connectDb(h, isNew) {
+    var load = isNew ? Promise.resolve([]) : h.getFile().then(function (f) { return f.arrayBuffer(); }).then(function (buf) {
+      return buf.byteLength ? readXlsx(buf).then(rowsToPatients) : [];
+    });
+    return load.then(function (list) {
+      mergeIn(list);
+      dbHandle = h; dbRemembered = null; dbError = '';
+      idb('readwrite', function (s) { return s.put(h, 'db'); }).catch(function () {});
+      persist();
+      render();
+      return saveDbNow();
+    }).then(function () {
+      if (!dbError) toast((isNew ? 'נוצר קובץ מאגר: ' : 'קובץ המאגר נפתח: ') + h.name + ' · ' + Object.keys(data).length + ' מטופלים');
+    }, function () {
+      dbError = 'לא ניתן לקרוא את הקובץ. ודאו שזה קובץ מאגר של Patient Check List ושהוא לא פתוח באקסל.';
+      renderDbBar();
+    });
+  }
+  function askWrite(h) {
+    return typeof h.requestPermission === 'function' ? h.requestPermission({ mode: 'readwrite' }) : Promise.resolve('granted');
+  }
+
   function fileFor(list, tag) {
     var name = 'patient-check-list-' + tag + '-' + today() + '.xlsx';
     return new File([buildXlsx(buildRows(list))], name, { type: XLSX_MIME });
@@ -934,6 +1050,8 @@
 
   // ---------- rendering ----------
   function render() {
+    if (IS_MANAGER) { if (!route) route = 'dashboard'; }
+    else if (route === 'table' || route === 'dashboard') route = null;
     var isTable = route === 'table', isDash = route === 'dashboard', overview = isTable || isDash;
     if (route && !overview && !data[route]) route = null;
     var showDetail = !!route && !overview;
@@ -950,6 +1068,7 @@
     $('view-table').hidden = !isTable;
     $('view-dash').hidden = !isDash;
     all$('.js-export').forEach(function (b) { b.hidden = Object.keys(data).length === 0; });
+    renderDbBar();
     if (isTable) { detailFor = null; renderTable(); }
     else if (isDash) { detailFor = null; renderDash(); }
     else if (showDetail) { if (detailFor !== route) buildDetail(route); syncDetail(); }
@@ -1289,14 +1408,8 @@
     files.reduce(function (chain, f) {
       return chain.then(function () {
         return f.arrayBuffer().then(readXlsx).then(function (rows) {
-          rowsToPatients(rows).forEach(function (x) {
-            var cur = data[x.id];
-            if (!cur) { data[x.id] = x.p; added++; }
-            else if (String(x.p.updatedAt) > String(cur.updatedAt || '')) { data[x.id] = x.p; updated++; }
-            // Same timestamp but different content: the file was corrected by hand in Excel.
-            else if (cur.source === 'import' && String(x.p.updatedAt) === String(cur.updatedAt || '') && contentKey(x.p) !== contentKey(cur)) { data[x.id] = x.p; updated++; }
-            else same++;
-          });
+          var c = mergeIn(rowsToPatients(rows));
+          added += c.added; updated += c.updated; same += c.same;
         }).catch(function () { bad++; });
       });
     }, Promise.resolve()).then(function () {
@@ -1310,6 +1423,34 @@
       toast(parts.join(' · ') || 'לא נמצאו מטופלים בקבצים.');
     });
   });
+
+  $('db-open').addEventListener('click', function () {
+    window.showOpenFilePicker({ types: PICK_TYPES }).then(function (hs) {
+      var h = hs[0];
+      return askWrite(h).then(function (p) {
+        if (p !== 'granted') { toast('בלי הרשאת שמירה אי אפשר לעבוד מול הקובץ.'); return; }
+        return connectDb(h, false);
+      });
+    }).catch(function () {});
+  });
+  $('db-new').addEventListener('click', function () {
+    window.showSaveFilePicker({ suggestedName: 'patient-check-list-db.xlsx', types: PICK_TYPES }).then(function (h) {
+      return connectDb(h, true);
+    }).catch(function () {});
+  });
+  $('db-resume').addEventListener('click', function () {
+    var h = dbRemembered;
+    if (!h) return;
+    askWrite(h).then(function (p) {
+      if (p !== 'granted') { toast('בלי הרשאת שמירה אי אפשר לעבוד מול הקובץ.'); return; }
+      return connectDb(h, false);
+    }).catch(function () {
+      dbError = 'הקובץ הקודם לא נמצא. ייתכן שהועבר או נמחק; פתחו אותו מחדש מהמקום החדש.';
+      dbRemembered = null;
+      renderDbBar();
+    });
+  });
+  $('db-save').addEventListener('click', saveDbNow);
 
   $('del').addEventListener('click', function () {
     $('del').hidden = true;
@@ -1357,8 +1498,22 @@
     $('legend-mark').innerHTML = MARK;
   })();
 
+  if (IS_MANAGER) {
+    document.title = 'Patient Check List Manager';
+    $('eyebrow').textContent = 'מנהל המחקר: מעקב אחרי כל המטופלים';
+    document.querySelector('.tab[data-view=""]').hidden = true;
+    $('send-box').hidden = true;
+    $('dash-hint').textContent = 'מייבאים לכאן את קובצי האקסל שהמלווים שלחו. הנתונים מצטברים, ואפשר לשמור אותם בקובץ מאגר אחד.';
+  } else {
+    $('tabs').hidden = true;
+  }
   load();
   render();
+  if (FS_OK) {
+    idb('readonly', function (s) { return s.get('db'); }).then(function (h) {
+      if (h && h.name && !dbHandle) { dbRemembered = h; renderDbBar(); }
+    }).catch(function () {});
+  }
 })();
 </script>
 </body>
