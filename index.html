@@ -251,6 +251,22 @@
     border: 1px solid var(--line); background: var(--surface); font-size: 14px; font-weight: 500; color: var(--muted);
   }
   .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .vitals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+  .vital { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .vital-bp { grid-column: 1 / -1; }
+  .vital-label { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .bp-row { display: flex; align-items: center; gap: 8px; }
+  .bp-row .vital-in { flex: 1 1 0; }
+  .bp-sep { font-size: 20px; color: var(--muted); }
+  .vital-in {
+    width: 100%; min-width: 0; height: 44px; padding: 0 12px;
+    background: var(--field); border: 1px solid var(--line); border-radius: 10px;
+    font-family: var(--mono), var(--font); font-size: 17px; text-align: center;
+  }
+  .vital-in:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+  .vital-in[aria-invalid="true"] { border-color: var(--danger); }
+  .vital-warn { font-size: 13px; color: var(--warn-ink); }
   textarea.note {
     display: block; width: 100%; min-height: 44px; padding: 10px 12px;
     background: var(--field); border: 1px solid var(--line); border-radius: 10px;
@@ -537,18 +553,34 @@
 (function () {
   'use strict';
 
+  // Step ids stay fixed when a title changes, so data saved under an older version still maps.
   var STEPS = [
-    { id: 's1', title: 'שאלונים כלליים', where: 'REDCap' },
-    { id: 's2', title: 'קבלת סיכום ניתוח', hint: 'רק אם המטופל עבר ניתוח.', naLabel: 'לא היה ניתוח' },
-    { id: 's3', title: 'הערכה נוירולוגית', where: 'CANTAB' },
-    { id: 's4', title: 'שאלוני חרדה ודיכאון', where: 'REDCap' },
-    { id: 's5', title: 'בדיקת MRI' },
-    { id: 's6', title: 'בדיקות תנועה ו-Voice' },
+    { id: 'consent', title: 'חתימה על הסכמה' },
+    { id: 's3', title: 'הערכה קוגניטיבית - CANTAB' },
+    { id: 'vitals', title: 'מדדי מטופל', hint: 'השלב מסומן לבד כשכל הערכים מולאו.', fields: ['weight', 'height', 'bpSys', 'bpDia'] },
+    { id: 's4', title: 'שאלוני חרדה דיכאון ושינה', where: 'REDCap' },
+    { id: 's5', title: 'סריקת MRI', fields: ['contrast'] },
+    { id: 's6', title: 'בדיקת תנועה ו-MoCA' },
     { id: 's7', title: 'מעבדת שינה' },
     { id: 's8', title: 'בדיקות דם', where: 'מלר״ד' },
     { id: 's9', title: 'בדיקת דופלר', where: 'מכון הדופלר' }
   ];
   var TOTAL = STEPS.length;
+  // Titles used by earlier versions, so their Excel files still import. Removed steps are left out.
+  var LEGACY_TITLES = { 'הערכה נוירולוגית': 's3', 'שאלוני חרדה ודיכאון': 's4', 'בדיקת MRI': 's5', 'בדיקות תנועה ו-Voice': 's6' };
+  var FIELD_LABELS = {
+    doneAt: 'מועד סימון', note: 'הערה', contrast: 'חומר ניגוד',
+    weight: 'משקל (ק״ג)', height: 'גובה (ס״מ)', bpSys: 'לחץ דם סיסטולי', bpDia: 'לחץ דם דיאסטולי'
+  };
+  var CONTRAST = { with: 'עם חומר ניגוד', without: 'בלי חומר ניגוד' };
+  // Soft ranges: a value outside them is kept, with a note to check it again.
+  var VITALS = {
+    weight: { label: 'משקל', unit: 'ק״ג', min: 2, max: 350 },
+    height: { label: 'גובה', unit: 'ס״מ', min: 40, max: 230 },
+    bpSys: { label: 'סיסטולי', unit: '', min: 60, max: 260 },
+    bpDia: { label: 'דיאסטולי', unit: '', min: 30, max: 160 }
+  };
+  var VITAL_KEYS = ['weight', 'height', 'bpSys', 'bpDia'];
   // The same source builds two pages: 'companion' (fill in and send) and 'manager' (dashboard and table).
   var MODE = 'companion';
   var IS_MANAGER = MODE === 'manager';
@@ -632,12 +664,28 @@
   // ---------- reading a patient ----------
   function stepState(p, sid) {
     var s = isObj(p.steps) && isObj(p.steps[sid]) ? p.steps[sid] : {};
-    return {
+    var out = {
       done: s.done === true,
       na: s.na === true && s.done !== true,
       doneAt: typeof s.doneAt === 'string' ? s.doneAt : '',
-      note: typeof s.note === 'string' ? s.note : ''
+      note: typeof s.note === 'string' ? s.note : '',
+      contrast: s.contrast === 'with' || s.contrast === 'without' ? s.contrast : ''
     };
+    VITAL_KEYS.forEach(function (k) { out[k] = typeof s[k] === 'number' && isFinite(s[k]) ? s[k] : null; });
+    return out;
+  }
+  function parseNum(v) {
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    var t = String(v == null ? '' : v).trim().replace(',', '.');
+    if (!/^\d+(\.\d+)?$/.test(t)) return null;
+    var n = parseFloat(t);
+    return isFinite(n) ? n : null;
+  }
+  function fieldValue(s, f) {
+    if (f === 'contrast') return s.contrast ? CONTRAST[s.contrast] : '';
+    if (f === 'doneAt') return s.done ? stamp(s.doneAt) : '';
+    if (f === 'note') return s.note.trim();
+    return s[f] == null ? '' : s[f];
   }
   function companionOf(p) { return typeof p.companion === 'string' ? p.companion.trim() : ''; }
   function resolved(p) {
@@ -740,11 +788,10 @@
   var NS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   var NS_PKG = 'http://schemas.openxmlformats.org/package/2006/relationships';
   function buildXlsx(rows) {
-    var width = rows[0].length;
+    var widths = columns().map(function (c) { return c.w; });
     var sheet = XML_HEAD + '<worksheet xmlns="' + NS_MAIN + '"><sheetViews><sheetView workbookViewId="0" rightToLeft="1"/></sheetViews><cols>';
-    for (var c = 0; c < width; c++) {
-      var w = c < 5 ? 18 : (c >= 5 + TOTAL * 3 ? 30 : ((c - 5) % 3 === 2 ? 40 : 22));
-      sheet += '<col min="' + (c + 1) + '" max="' + (c + 1) + '" width="' + w + '" customWidth="1"/>';
+    for (var c = 0; c < rows[0].length; c++) {
+      sheet += '<col min="' + (c + 1) + '" max="' + (c + 1) + '" width="' + (widths[c] || 20) + '" customWidth="1"/>';
     }
     sheet += '</cols><sheetData>';
     rows.forEach(function (row, r) {
@@ -833,46 +880,76 @@
   }
 
   // One row per patient: the shape a general database can take in as-is.
-  function buildRows(list) {
-    var head = [FIRST_HEAD, 'מלווה', 'נפתח', 'עודכן', 'שלבים שנסגרו (מתוך ' + TOTAL + ')'];
+  // Column layout of the Excel file. Per step: status, time ticked, its own values, note.
+  var COL_ID = 'מזהה רשומה', COL_ISO = 'חותמת עדכון';
+  function columns() {
+    var cols = [
+      { head: FIRST_HEAD, w: 16, get: function (x) { return x.p.code; } },
+      { head: 'מלווה', w: 18, get: function (x) { return companionOf(x.p); } },
+      { head: 'נפתח', w: 17, get: function (x) { return stamp(x.p.createdAt); } },
+      { head: 'עודכן', w: 17, get: function (x) { return stamp(x.p.updatedAt); } },
+      { head: 'שלבים שנסגרו (מתוך ' + TOTAL + ')', w: 12, get: function (x) { return x.n; } }
+    ];
     STEPS.forEach(function (st, i) {
-      var n = i + 1;
-      head.push(n + '. ' + st.title, n + '. מועד סימון', n + '. הערה');
-    });
-    head.push('מזהה רשומה', 'חותמת עדכון');
-    var rows = [head];
-    list.forEach(function (x) {
-      var row = [x.p.code, companionOf(x.p), stamp(x.p.createdAt), stamp(x.p.updatedAt), x.n];
-      STEPS.forEach(function (st) {
-        var s = stepState(x.p, st.id);
-        row.push(s.done ? ST_DONE : (s.na ? ST_NA : ''), s.done ? stamp(s.doneAt) : '', s.note.trim());
+      var n = (i + 1) + '. ';
+      cols.push({ head: n + st.title, w: 24, get: function (x) { var s = stepState(x.p, st.id); return s.done ? ST_DONE : (s.na ? ST_NA : ''); } });
+      ['doneAt'].concat(st.fields || [], ['note']).forEach(function (f) {
+        cols.push({ head: n + FIELD_LABELS[f], w: f === 'note' ? 40 : (f === 'doneAt' ? 17 : 14), get: function (x) { return fieldValue(stepState(x.p, st.id), f); } });
       });
-      row.push(x.id, validDate(x.p.updatedAt) ? x.p.updatedAt : '');
-      rows.push(row);
     });
+    cols.push({ head: COL_ID, w: 22, get: function (x) { return x.id; } });
+    cols.push({ head: COL_ISO, w: 26, get: function (x) { return validDate(x.p.updatedAt) ? x.p.updatedAt : ''; } });
+    return cols;
+  }
+  // One row per patient: the shape a general database can take in as-is.
+  function buildRows(list) {
+    var cols = columns();
+    var rows = [cols.map(function (c) { return c.head; })];
+    list.forEach(function (x) { rows.push(cols.map(function (c) { return c.get(x); })); });
     return rows;
   }
   function cellText(v) { return v == null ? '' : String(v); }
+  // Reads columns by their headings, so files from earlier versions (other steps, other order) still import.
   function rowsToPatients(rows) {
-    var head = rows[0] || [];
-    if (cellText(head[0]).trim() !== FIRST_HEAD) throw new Error('format');
-    var idCol = 5 + TOTAL * 3, isoCol = idCol + 1, out = [];
+    var head = (rows[0] || []).map(function (h) { return cellText(h).trim(); });
+    if (head[0] !== FIRST_HEAD) throw new Error('format');
+    var at = {}, titleToId = {}, labelToField = {}, groups = {};
+    head.forEach(function (h, i) { if (!(h in at)) at[h] = i; });
+    STEPS.forEach(function (st) { titleToId[st.title] = st.id; });
+    Object.keys(LEGACY_TITLES).forEach(function (t) { titleToId[t] = LEGACY_TITLES[t]; });
+    Object.keys(FIELD_LABELS).forEach(function (f) { labelToField[FIELD_LABELS[f]] = f; });
+    head.forEach(function (h, i) {
+      var m = /^(\d+)\.\s*(.+)$/.exec(h);
+      if (!m) return;
+      var g = groups[m[1]] || (groups[m[1]] = { id: null, cols: {} }), label = m[2].trim();
+      if (titleToId[label]) { g.id = titleToId[label]; g.cols.status = i; }
+      else if (labelToField[label]) g.cols[labelToField[label]] = i;
+    });
+    var stepCols = Object.keys(groups).map(function (k) { return groups[k]; }).filter(function (g) { return g.id; });
+    function cell(row, name) { return name in at ? row[at[name]] : ''; }
+    var out = [];
     for (var r = 1; r < rows.length; r++) {
       var row = rows[r] || [];
       var code = cellText(row[0]).trim();
       if (!code) continue;
-      var created = parseStamp(row[2]);
-      var iso = cellText(row[isoCol]).trim();
-      var updated = (validDate(iso) ? iso : '') || parseStamp(row[3]) || created || new Date().toISOString();
-      var p = { code: code.slice(0, 40), companion: cellText(row[1]).trim().slice(0, 60), createdAt: created || updated, updatedAt: updated, source: 'import', steps: {} };
-      STEPS.forEach(function (st, i) {
-        var c = 5 + i * 3, status = cellText(row[c]).trim(), note = cellText(row[c + 2]), s = {};
-        if (status === ST_DONE) { s.done = true; s.doneAt = parseStamp(row[c + 1]) || null; }
+      var created = parseStamp(cell(row, 'נפתח'));
+      var iso = cellText(cell(row, COL_ISO)).trim();
+      var updated = (validDate(iso) ? iso : '') || parseStamp(cell(row, 'עודכן')) || created || new Date().toISOString();
+      var p = { code: code.slice(0, 40), companion: cellText(cell(row, 'מלווה')).trim().slice(0, 60), createdAt: created || updated, updatedAt: updated, source: 'import', steps: {} };
+      stepCols.forEach(function (g) {
+        var c = g.cols, s = {};
+        var status = cellText(row[c.status]).trim();
+        if (status === ST_DONE) { s.done = true; s.doneAt = 'doneAt' in c ? (parseStamp(row[c.doneAt]) || null) : null; }
         else if (status === ST_NA) s.na = true;
-        if (note.trim()) s.note = note.slice(0, 4000);
-        if (Object.keys(s).length) p.steps[st.id] = s;
+        if ('note' in c && cellText(row[c.note]).trim()) s.note = cellText(row[c.note]).slice(0, 4000);
+        if ('contrast' in c) {
+          var ct = cellText(row[c.contrast]).trim();
+          if (ct === CONTRAST.with) s.contrast = 'with'; else if (ct === CONTRAST.without) s.contrast = 'without';
+        }
+        VITAL_KEYS.forEach(function (k) { if (k in c) { var v = parseNum(row[c[k]]); if (v != null) s[k] = v; } });
+        if (Object.keys(s).length) p.steps[g.id] = s;
       });
-      var id = cellText(row[idCol]).trim();
+      var id = cellText(cell(row, COL_ID)).trim();
       if (!ID_RE.test(id)) {
         // No record id (the file was edited by hand): key the row by code and companion.
         var h = 5381, key = code + '|' + p.companion;
@@ -885,7 +962,10 @@
   }
 
   function contentKey(p) {
-    return JSON.stringify([p.code, companionOf(p), STEPS.map(function (st) { var s = stepState(p, st.id); return [s.done, s.na, stamp(s.doneAt), s.note.trim()]; })]);
+    return JSON.stringify([p.code, companionOf(p), STEPS.map(function (st) {
+      var s = stepState(p, st.id);
+      return [s.done, s.na, stamp(s.doneAt), s.note.trim(), s.contrast].concat(VITAL_KEYS.map(function (k) { return s[k]; }));
+    })]);
   }
   function mergeIn(list) {
     var c = { added: 0, updated: 0, same: 0 };
@@ -1173,6 +1253,72 @@
         });
         extra.appendChild(na);
       }
+      var contrast = null, vitals = null;
+      if ((st.fields || []).indexOf('contrast') !== -1) {
+        contrast = {};
+        var grp = el('div', 'chips');
+        grp.setAttribute('role', 'group');
+        grp.setAttribute('aria-label', 'חומר ניגוד');
+        ['with', 'without'].forEach(function (v) {
+          var b = el('button', 'chip', CONTRAST[v]);
+          b.type = 'button';
+          b.addEventListener('click', function () {
+            var s = stepState(data[route], st.id);
+            patchStep(st.id, { contrast: s.contrast === v ? null : v });
+          });
+          grp.appendChild(b);
+          contrast[v] = b;
+        });
+        extra.appendChild(grp);
+      }
+      if ((st.fields || []).indexOf('weight') !== -1) {
+        vitals = {};
+        var grid = el('div', 'vitals');
+        var bp = null;
+        VITAL_KEYS.forEach(function (k) {
+          var spec = VITALS[k], isBp = k === 'bpSys' || k === 'bpDia';
+          var wrap = el('div', 'vital');
+          var lab2 = el('label', isBp ? 'vh' : '', spec.label + (spec.unit ? ' (' + spec.unit + ')' : ''));
+          if (isBp) lab2.textContent = 'לחץ דם ' + spec.label;
+          lab2.htmlFor = 'vital-' + k;
+          var inp = el('input', 'vital-in');
+          inp.type = 'text'; inp.id = 'vital-' + k; inp.dir = 'ltr';
+          inp.inputMode = 'decimal'; inp.autocomplete = 'off'; inp.maxLength = 6;
+          if (isBp) inp.placeholder = spec.label;
+          // Blood pressure's two numbers share one note under them.
+          var warn = isBp && bp ? bp.querySelector('.vital-warn') : el('span', 'vital-warn');
+          if (!(isBp && bp)) warn.hidden = true;
+          inp.addEventListener('input', function () {
+            var p = data[route], v = parseNum(inp.value), f = {};
+            f[k] = inp.value.trim() ? v : null;
+            var s = stepState(p, st.id), after = Object.assign({}, s, f);
+            // All values filled in: tick the step, once. Clearing a value later leaves the tick to the companion.
+            if (!s.done && VITAL_KEYS.every(function (kk) { return after[kk] != null; })) { f.done = true; f.na = false; f.doneAt = new Date().toISOString(); }
+            patchStep(st.id, f, true);
+            showVitalWarn(inp, warn, spec);
+          });
+          inp.addEventListener('blur', function () { flushPersist(); syncDetail(); });
+          if (isBp) {
+            if (!bp) {
+              bp = el('div', 'vital vital-bp');
+              bp.appendChild(el('span', 'vital-label', 'לחץ דם (מ״מ כספית)'));
+              var r0 = el('div', 'bp-row'); r0.dir = 'ltr';
+              bp.appendChild(r0);
+              bp.appendChild(warn);
+              grid.appendChild(bp);
+            }
+            var row2 = bp.querySelector('.bp-row');
+            if (k === 'bpDia') row2.appendChild(el('span', 'bp-sep', '/'));
+            row2.appendChild(lab2); row2.appendChild(inp);
+          } else {
+            lab2.className = 'vital-label';
+            wrap.appendChild(lab2); wrap.appendChild(inp); wrap.appendChild(warn);
+            grid.appendChild(wrap);
+          }
+          vitals[k] = { input: inp, warn: warn, spec: spec };
+        });
+        extra.appendChild(grid);
+      }
       var lab = el('label', 'vh', 'הערה לשלב ' + (i + 1) + ': ' + st.title);
       lab.htmlFor = 'note-' + st.id;
       var ta = el('textarea', 'note');
@@ -1183,8 +1329,26 @@
       extra.appendChild(lab); extra.appendChild(ta);
       li.appendChild(extra);
       list.appendChild(li);
-      stepEls[st.id] = { li: li, head: head, meta: meta, na: na, ta: ta };
+      stepEls[st.id] = { li: li, head: head, meta: meta, na: na, ta: ta, contrast: contrast, vitals: vitals };
     });
+  }
+  function showVitalWarn(inp, warn, spec) {
+    var t = inp.value.trim(), v = parseNum(t), msg = '';
+    if (t && v == null) msg = 'יש להקליד מספר בלבד';
+    else if (v != null && (v < spec.min || v > spec.max)) msg = 'ערך חריג, כדאי לבדוק שוב';
+    var row = warn.parentNode;
+    var others = row ? Array.prototype.filter.call(row.querySelectorAll('.vital-in'), function (x) { return x !== inp; }) : [];
+    // Blood pressure shares one note for both numbers: keep a note the other number still needs.
+    if (!msg && others.length) {
+      others.forEach(function (o) {
+        var ov = parseNum(o.value), ok = VITALS[o.id.replace('vital-', '')];
+        if (o.value.trim() && ov == null) msg = 'יש להקליד מספר בלבד';
+        else if (ov != null && (ov < ok.min || ov > ok.max)) msg = 'ערך חריג, כדאי לבדוק שוב';
+      });
+    }
+    warn.textContent = msg;
+    warn.hidden = !msg;
+    inp.setAttribute('aria-invalid', t && v == null ? 'true' : 'false');
   }
 
   function syncDetail() {
@@ -1204,6 +1368,17 @@
       else if (s.na) { r.meta.textContent = ST_NA; r.meta.hidden = false; }
       else r.meta.hidden = true;
       if (r.na) r.na.setAttribute('aria-pressed', s.na ? 'true' : 'false');
+      if (r.contrast) Object.keys(r.contrast).forEach(function (v) { r.contrast[v].setAttribute('aria-pressed', s.contrast === v ? 'true' : 'false'); });
+      if (r.vitals) {
+        VITAL_KEYS.forEach(function (k) {
+          var vi = r.vitals[k], want = s[k] == null ? '' : String(s[k]);
+          if (document.activeElement !== vi.input && parseNum(vi.input.value) !== s[k]) {
+            // Keep text the companion typed that is not a number yet, so they can correct it.
+            if (!(s[k] == null && vi.input.value.trim() && parseNum(vi.input.value) == null)) vi.input.value = want;
+          }
+          showVitalWarn(vi.input, vi.warn, vi.spec);
+        });
+      }
       if (document.activeElement !== r.ta && r.ta.value !== s.note) r.ta.value = s.note;
       autosize(r.ta);
     });
@@ -1287,6 +1462,11 @@
       track.appendChild(fill);
       row.appendChild(head); row.appendChild(track);
       if (na) row.appendChild(el('span', 'bar-note', na + ' ' + ST_NA));
+      if ((st.fields || []).indexOf('contrast') !== -1) {
+        var cw = 0, cwo = 0;
+        all.forEach(function (x) { var s = stepState(x.p, st.id); if (s.contrast === 'with') cw++; else if (s.contrast === 'without') cwo++; });
+        if (cw || cwo) row.appendChild(el('span', 'bar-note', cw + ' ' + CONTRAST.with + ' · ' + cwo + ' ' + CONTRAST.without));
+      }
       bars.appendChild(row);
     });
 
