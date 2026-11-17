@@ -551,7 +551,7 @@
   </section>
 </div>
 
-<input type="file" id="import-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
+<input type="file" id="import-file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple hidden>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script>
@@ -567,7 +567,7 @@
     { id: 's5', title: 'סריקת MRI', fields: ['contrast'] },
     { id: 's6', title: 'בדיקת תנועה ו-MoCA' },
     { id: 's7', title: 'מעבדת שינה' },
-    { id: 's8', title: 'בדיקות דם', where: 'מלר״ד' },
+    { id: 's8', title: 'בדיקות דם', where: 'מלר״מ' },
     { id: 's9', title: 'בדיקת דופלר', where: 'מכון הדופלר' }
   ];
   var TOTAL = STEPS.length;
@@ -1082,7 +1082,7 @@
   }
   async function listXlsx(dir, depth, out) {
     for await (var entry of dir.values()) {
-      if (entry.kind === 'file' && /\.xlsx$/i.test(entry.name) && entry.name.indexOf('~$') !== 0) out.push(entry);
+      if (entry.kind === 'file' && /\.(xlsx|csv)$/i.test(entry.name) && entry.name.indexOf('~$') !== 0) out.push(entry);
       else if (entry.kind === 'directory' && depth < 1) await listXlsx(entry, depth + 1, out);
     }
     return out;
@@ -1094,7 +1094,7 @@
     for (var i = 0; i < entries.length; i++) {
       try {
         var f = await entries[i].getFile();
-        var list = rowsToPatients(await readXlsx(await f.arrayBuffer()));
+        var list = rowsToPatients(await readTable(f));
         list.forEach(function (x) { x.t = f.lastModified || 0; pool.push(x); });
       } catch (e) { c.bad++; }
     }
@@ -1139,6 +1139,45 @@
     var name = 'patient-check-list-' + tag + '-' + today() + '.xlsx';
     return new File([buildXlsx(buildRows(list))], name, { type: XLSX_MIME });
   }
+  // CSV twin of the Excel file. Chrome on Android shares CSV files but not Excel files.
+  function csvCell(v) {
+    v = v == null ? '' : String(v);
+    if (/^[=+\-@]/.test(v)) v = "'" + v; // keep spreadsheets from running typed text as a formula
+    return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }
+  function csvFileFor(list, tag) {
+    var name = 'patient-check-list-' + tag + '-' + today() + '.csv';
+    var text = '﻿' + buildRows(list).map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n';
+    return new File([text], name, { type: 'text/csv' });
+  }
+  function parseCsv(text) {
+    var rows = [], row = [], cell = '', q = false, i = 0;
+    text = text.replace(/^﻿/, '');
+    // Excel saves CSV with ';' in some regions: use whichever separator the heading row has more of.
+    var firstLine = text.split(/\r?\n/, 1)[0] || '';
+    var sep = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
+    for (; i < text.length; i++) {
+      var ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === sep) { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += ch;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows.map(function (r) { return r.map(function (c) { return /^'[=+\-@]/.test(c) ? c.slice(1) : c; }); });
+  }
+  function readTable(f) {
+    if (/\.csv$/i.test(f.name)) return f.text().then(parseCsv);
+    return f.arrayBuffer().then(readXlsx);
+  }
+  function canShareFile(file) {
+    try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { return false; }
+  }
   function download(file) {
     var url = URL.createObjectURL(file), a = document.createElement('a');
     a.href = url; a.download = file.name;
@@ -1154,8 +1193,11 @@
   function send(list, tag) {
     if (!list.length) return;
     flushPersist();
-    var file = fileFor(list, tag), canShare = false;
-    try { canShare = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { canShare = false; }
+    var file = fileFor(list, tag), canShare = canShareFile(file);
+    if (!canShare) {
+      var csv = csvFileFor(list, tag);
+      if (canShareFile(csv)) { file = csv; canShare = true; }
+    }
     if (!canShare) {
       download(file);
       markSent(list);
@@ -1666,7 +1708,7 @@
     var added = 0, updated = 0, same = 0, bad = 0, pool = [];
     files.reduce(function (chain, f) {
       return chain.then(function () {
-        return f.arrayBuffer().then(readXlsx).then(function (rows) {
+        return readTable(f).then(function (rows) {
           rowsToPatients(rows).forEach(function (x) { x.t = f.lastModified || 0; pool.push(x); });
         }).catch(function () { bad++; });
       });
