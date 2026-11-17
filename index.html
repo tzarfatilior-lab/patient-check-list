@@ -375,6 +375,7 @@
 </head>
 <body>
 <div class="wrap" id="app">
+  <div class="banner" id="banner-inapp" hidden>הדף פתוח בתוך אפליקציה אחרת (למשל ווטסאפ), ושם שליחת הסיכום לא תעבוד והנתונים עלולים להימחק. פתחו אותו בכרום: בתפריט ⋮ בחרו "פתיחה ב-Chrome", או השתמשו באייקון במסך הבית.</div>
   <div class="banner" id="banner-store" hidden>הדפדפן לא מאפשר שמירה במכשיר (למשל בגלישה פרטית). מה שתסמנו יימחק כשהדף ייסגר, אז שלחו את הסיכום לפני הסגירה.</div>
 
   <header class="top" id="top">
@@ -435,6 +436,7 @@
       <p>הוסיפו קוד מטופל למעלה, וייפתח לו צ׳קליסט עם השלבים האלה:</p>
       <ol class="panel protocol" id="protocol"></ol>
     </div>
+    <p class="hint">גרסת הדף: 6 (17.11.2026)</p>
   </section>
 
   <!-- ===== study manager: dashboard ===== -->
@@ -1175,6 +1177,10 @@
     if (/\.csv$/i.test(f.name)) return f.text().then(parseCsv);
     return f.arrayBuffer().then(readXlsx);
   }
+  var UA = navigator.userAgent || '';
+  var IS_ANDROID = /Android/i.test(UA);
+  // Browsers built into other apps (WhatsApp, Facebook, Instagram, Gmail and other Android web views) can't share files.
+  var IN_APP = /WhatsApp|FBAN|FBAV|Instagram|Line\/|MicroMessenger|; wv\)/i.test(UA);
   function canShareFile(file) {
     try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { return false; }
   }
@@ -1193,26 +1199,28 @@
   function send(list, tag) {
     if (!list.length) return;
     flushPersist();
-    var file = fileFor(list, tag), canShare = canShareFile(file);
-    if (!canShare) {
-      var csv = csvFileFor(list, tag);
-      if (canShareFile(csv)) { file = csv; canShare = true; }
+    var xlsx = fileFor(list, tag), csv = csvFileFor(list, tag);
+    // Chrome on Android says it can share an Excel file and then refuses when the share starts,
+    // so on Android the CSV goes first, and any refusal moves on to the next format.
+    var tries = (IS_ANDROID ? [csv, xlsx] : [xlsx, csv]).filter(canShareFile);
+    function fallback() {
+      download(xlsx);
+      markSent(list);
+      toast(IN_APP
+        ? 'הקובץ ירד למכשיר, כי הדף פתוח בתוך אפליקציה אחרת. פתחו אותו בכרום כדי לשתף ישר ל-OneDrive.'
+        : 'הקובץ ירד למכשיר, כי הדפדפן הזה לא מאפשר לשתף קבצים. העלו אותו לתיקיית המחקר ב-OneDrive, או צרפו אותו למייל למנהל המחקר.');
     }
-    if (!canShare) {
-      download(file);
-      markSent(list);
-      toast('הקובץ ירד למכשיר. העלו אותו לתיקיית המחקר ב-OneDrive, או צרפו אותו למייל למנהל המחקר.');
-      return;
-    }
-    navigator.share({ files: [file], title: 'Patient Check List' }).then(function () {
-      markSent(list);
-      toast('הקובץ הועבר לאפליקציה שבחרתם. ודאו שהוא נשמר בתיקיית המחקר או שהמייל נשלח.');
-    }, function (err) {
-      if (err && err.name === 'AbortError') { toast('השליחה בוטלה.'); return; }
-      download(file);
-      markSent(list);
-      toast('הקובץ ירד למכשיר. העלו אותו לתיקיית המחקר ב-OneDrive, או צרפו אותו למייל למנהל המחקר.');
-    });
+    if (!tries.length) { fallback(); return; }
+    (function attempt(i) {
+      navigator.share({ files: [tries[i]], title: 'Patient Check List' }).then(function () {
+        markSent(list);
+        toast('הקובץ הועבר לאפליקציה שבחרתם. ודאו שהוא נשמר בתיקיית המחקר או שהמייל נשלח.');
+      }, function (err) {
+        if (err && err.name === 'AbortError') { toast('השליחה בוטלה.'); return; }
+        if (i + 1 < tries.length) attempt(i + 1);
+        else fallback();
+      });
+    })(0);
   }
   function fileTag(code) { return String(code).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) || 'patient'; }
 
@@ -1257,6 +1265,7 @@
     var showDetail = !!route && !overview;
     var current = isTable ? 'table' : (isDash ? 'dashboard' : '');
     $('banner-store').hidden = canStore;
+    $('banner-inapp').hidden = IS_MANAGER || !IN_APP;
     $('app').classList.toggle('wide', overview);
     $('top').hidden = showDetail;
     all$('.tab').forEach(function (t) {
