@@ -442,6 +442,8 @@
     <div class="view-head">
       <h2>דשבורד</h2>
       <div class="actions">
+        <button type="button" class="btn small js-folder-other" hidden>תיקייה אחרת</button>
+        <button type="button" class="btn small js-import-folder" hidden>ייבוא מתיקייה</button>
         <button type="button" class="btn small js-import">ייבוא קבצים</button>
         <button type="button" class="btn small primary js-export" hidden>ייצוא לאקסל</button>
       </div>
@@ -483,6 +485,8 @@
         <span class="count" id="t-count"></span>
       </div>
       <div class="actions">
+        <button type="button" class="btn small js-folder-other" hidden>תיקייה אחרת</button>
+        <button type="button" class="btn small js-import-folder" hidden>ייבוא מתיקייה</button>
         <button type="button" class="btn small js-import">ייבוא קבצים</button>
         <button type="button" class="btn small primary js-export" hidden>ייצוא לאקסל</button>
       </div>
@@ -530,6 +534,7 @@
       <h2>סיום ושליחה</h2>
       <p class="hint" id="sent-status"></p>
       <button type="button" class="btn primary" id="send-one">שליחת הסיכום למנהל המחקר</button>
+      <p class="hint">בחלון שנפתח בחרו OneDrive ושמרו בתיקיית המחקר. אם אין לכם OneDrive בטלפון, בחרו מייל ושלחו למנהל המחקר.</p>
       <button type="button" class="btn" id="download-one">הורדת קובץ אקסל</button>
     </div>
 
@@ -967,6 +972,16 @@
       return [s.done, s.na, stamp(s.doneAt), s.note.trim(), s.contrast].concat(VITAL_KEYS.map(function (k) { return s[k]; }));
     })]);
   }
+  // Several files can hold the same patient: keep the newest record, and on a tie the most recently saved file.
+  function newestPerId(pool) {
+    var best = {};
+    pool.forEach(function (x) {
+      var b = best[x.id];
+      var u = String(x.p.updatedAt || ''), bu = b ? String(b.p.updatedAt || '') : '';
+      if (!b || u > bu || (u === bu && (x.t || 0) >= (b.t || 0))) best[x.id] = x;
+    });
+    return Object.keys(best).map(function (k) { return best[k]; });
+  }
   function mergeIn(list) {
     var c = { added: 0, updated: 0, same: 0 };
     list.forEach(function (x) {
@@ -1053,6 +1068,69 @@
       renderDbBar();
     });
   }
+  // ---------- incoming folder: the shared OneDrive folder companions save their files to ----------
+  var DIR_OK = typeof window.showDirectoryPicker === 'function';
+  var folderHandle = null;
+  function renderFolderButtons() {
+    var show = IS_MANAGER && DIR_OK;
+    all$('.js-import-folder').forEach(function (b) {
+      b.hidden = !show;
+      b.textContent = folderHandle ? 'ייבוא מהתיקייה' : 'ייבוא מתיקייה';
+      b.title = folderHandle ? 'קורא את כל קובצי האקסל בתיקייה ' + folderHandle.name : 'בחירת התיקייה שאליה המלווים שולחים את הקבצים';
+    });
+    all$('.js-folder-other').forEach(function (b) { b.hidden = !show || !folderHandle; });
+  }
+  async function listXlsx(dir, depth, out) {
+    for await (var entry of dir.values()) {
+      if (entry.kind === 'file' && /\.xlsx$/i.test(entry.name) && entry.name.indexOf('~$') !== 0) out.push(entry);
+      else if (entry.kind === 'directory' && depth < 1) await listXlsx(entry, depth + 1, out);
+    }
+    return out;
+  }
+  async function importFolder(dir) {
+    toast('קורא את התיקייה…');
+    var entries = await listXlsx(dir, 0, []);
+    var c = { added: 0, updated: 0, same: 0, bad: 0 }, pool = [];
+    for (var i = 0; i < entries.length; i++) {
+      try {
+        var f = await entries[i].getFile();
+        var list = rowsToPatients(await readXlsx(await f.arrayBuffer()));
+        list.forEach(function (x) { x.t = f.lastModified || 0; pool.push(x); });
+      } catch (e) { c.bad++; }
+    }
+    var r = mergeIn(newestPerId(pool));
+    c.added = r.added; c.updated = r.updated; c.same = r.same;
+    persist();
+    render();
+    var parts = ['נקראו ' + (entries.length - c.bad) + ' קבצים'];
+    if (c.added) parts.push('נוספו ' + c.added + ' מטופלים');
+    if (c.updated) parts.push('עודכנו ' + c.updated);
+    if (!c.added && !c.updated && entries.length) parts.push('אין שינויים חדשים');
+    if (c.bad) parts.push(c.bad + ' קבצים לא נקראו');
+    toast(entries.length ? parts.join(' · ') : 'אין קובצי אקסל בתיקייה ' + dir.name + '.');
+  }
+  function pickFolder() {
+    return window.showDirectoryPicker({ id: 'incoming', mode: 'read' }).then(function (h) {
+      folderHandle = h;
+      idb('readwrite', function (s) { return s.put(h, 'folder'); }).catch(function () {});
+      renderFolderButtons();
+      return importFolder(h);
+    }).catch(function () {});
+  }
+  function useFolder() {
+    if (!folderHandle) return pickFolder();
+    var h = folderHandle;
+    var ask = typeof h.requestPermission === 'function' ? h.requestPermission({ mode: 'read' }) : Promise.resolve('granted');
+    return ask.then(function (p) {
+      if (p !== 'granted') { toast('בלי הרשאת קריאה אי אפשר לייבא מהתיקייה.'); return; }
+      return importFolder(h);
+    }).catch(function () {
+      folderHandle = null;
+      renderFolderButtons();
+      toast('התיקייה הקודמת לא נמצאה. בחרו אותה שוב.');
+    });
+  }
+
   function askWrite(h) {
     return typeof h.requestPermission === 'function' ? h.requestPermission({ mode: 'readwrite' }) : Promise.resolve('granted');
   }
@@ -1081,17 +1159,17 @@
     if (!canShare) {
       download(file);
       markSent(list);
-      toast('הקובץ ירד למכשיר. צרפו אותו להודעה למנהל המחקר.');
+      toast('הקובץ ירד למכשיר. העלו אותו לתיקיית המחקר ב-OneDrive, או צרפו אותו למייל למנהל המחקר.');
       return;
     }
     navigator.share({ files: [file], title: 'Patient Check List' }).then(function () {
       markSent(list);
-      toast('הקובץ הועבר לאפליקציה שבחרתם. ודאו שההודעה נשלחה.');
+      toast('הקובץ הועבר לאפליקציה שבחרתם. ודאו שהוא נשמר בתיקיית המחקר או שהמייל נשלח.');
     }, function (err) {
       if (err && err.name === 'AbortError') { toast('השליחה בוטלה.'); return; }
       download(file);
       markSent(list);
-      toast('הקובץ ירד למכשיר. צרפו אותו להודעה למנהל המחקר.');
+      toast('הקובץ ירד למכשיר. העלו אותו לתיקיית המחקר ב-OneDrive, או צרפו אותו למייל למנהל המחקר.');
     });
   }
   function fileTag(code) { return String(code).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) || 'patient'; }
@@ -1149,6 +1227,7 @@
     $('view-dash').hidden = !isDash;
     all$('.js-export').forEach(function (b) { b.hidden = Object.keys(data).length === 0; });
     renderDbBar();
+    renderFolderButtons();
     if (isTable) { detailFor = null; renderTable(); }
     else if (isDash) { detailFor = null; renderDash(); }
     else if (showDetail) { if (detailFor !== route) buildDetail(route); syncDetail(); }
@@ -1584,15 +1663,16 @@
     var files = Array.prototype.slice.call(this.files || []);
     this.value = '';
     if (!files.length) return;
-    var added = 0, updated = 0, same = 0, bad = 0;
+    var added = 0, updated = 0, same = 0, bad = 0, pool = [];
     files.reduce(function (chain, f) {
       return chain.then(function () {
         return f.arrayBuffer().then(readXlsx).then(function (rows) {
-          var c = mergeIn(rowsToPatients(rows));
-          added += c.added; updated += c.updated; same += c.same;
+          rowsToPatients(rows).forEach(function (x) { x.t = f.lastModified || 0; pool.push(x); });
         }).catch(function () { bad++; });
       });
     }, Promise.resolve()).then(function () {
+      var c = mergeIn(newestPerId(pool));
+      added = c.added; updated = c.updated; same = c.same;
       persist();
       render();
       var parts = [];
@@ -1631,6 +1711,8 @@
     });
   });
   $('db-save').addEventListener('click', saveDbNow);
+  all$('.js-import-folder').forEach(function (b) { b.addEventListener('click', useFolder); });
+  all$('.js-folder-other').forEach(function (b) { b.addEventListener('click', pickFolder); });
 
   $('del').addEventListener('click', function () {
     $('del').hidden = true;
@@ -1683,7 +1765,9 @@
     $('eyebrow').textContent = 'מנהל המחקר: מעקב אחרי כל המטופלים';
     document.querySelector('.tab[data-view=""]').hidden = true;
     $('send-box').hidden = true;
-    $('dash-hint').textContent = 'מייבאים לכאן את קובצי האקסל שהמלווים שלחו. הנתונים מצטברים, ואפשר לשמור אותם בקובץ מאגר אחד.';
+    $('dash-hint').textContent = DIR_OK
+      ? 'המלווים שומרים את הקבצים בתיקיית OneDrive של המחקר. "ייבוא מהתיקייה" קורא את כולם בבת אחת; קבצים שכבר יובאו לא נספרים פעמיים.'
+      : 'מייבאים לכאן את קובצי האקסל שהמלווים שלחו. הנתונים מצטברים, ואפשר לשמור אותם בקובץ מאגר אחד.';
   } else {
     $('tabs').hidden = true;
   }
@@ -1692,6 +1776,11 @@
   if (FS_OK) {
     idb('readonly', function (s) { return s.get('db'); }).then(function (h) {
       if (h && h.name && !dbHandle) { dbRemembered = h; renderDbBar(); }
+    }).catch(function () {});
+  }
+  if (IS_MANAGER && DIR_OK) {
+    idb('readonly', function (s) { return s.get('folder'); }).then(function (h) {
+      if (h && h.name && !folderHandle) { folderHandle = h; renderFolderButtons(); }
     }).catch(function () {});
   }
 })();
