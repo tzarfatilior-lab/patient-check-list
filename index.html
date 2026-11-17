@@ -436,7 +436,7 @@
       <p>הוסיפו קוד מטופל למעלה, וייפתח לו צ׳קליסט עם השלבים האלה:</p>
       <ol class="panel protocol" id="protocol"></ol>
     </div>
-    <p class="hint">גרסת הדף: 6 (17.11.2026)</p>
+    <p class="hint">גרסת הדף: 7 (17.11.2026)</p>
   </section>
 
   <!-- ===== study manager: dashboard ===== -->
@@ -1077,8 +1077,8 @@
     var show = IS_MANAGER && DIR_OK;
     all$('.js-import-folder').forEach(function (b) {
       b.hidden = !show;
-      b.textContent = folderHandle ? 'ייבוא מהתיקייה' : 'ייבוא מתיקייה';
-      b.title = folderHandle ? 'קורא את כל קובצי האקסל בתיקייה ' + folderHandle.name : 'בחירת התיקייה שאליה המלווים שולחים את הקבצים';
+      b.textContent = folderHandle ? 'ייבוא מ-' + folderHandle.name : 'בחירת תיקיית הקבצים';
+      b.title = folderHandle ? 'קורא את כל הקבצים בתיקייה ' + folderHandle.name : 'בחירת התיקייה שאליה המלווים שולחים את הקבצים';
     });
     all$('.js-folder-other').forEach(function (b) { b.hidden = !show || !folderHandle; });
   }
@@ -1089,8 +1089,8 @@
     }
     return out;
   }
-  async function importFolder(dir) {
-    toast('קורא את התיקייה…');
+  async function importFolder(dir, quiet) {
+    if (!quiet) toast('קורא את התיקייה…');
     var entries = await listXlsx(dir, 0, []);
     var c = { added: 0, updated: 0, same: 0, bad: 0 }, pool = [];
     for (var i = 0; i < entries.length; i++) {
@@ -1109,10 +1109,28 @@
     if (c.updated) parts.push('עודכנו ' + c.updated);
     if (!c.added && !c.updated && entries.length) parts.push('אין שינויים חדשים');
     if (c.bad) parts.push(c.bad + ' קבצים לא נקראו');
-    toast(entries.length ? parts.join(' · ') : 'אין קובצי אקסל בתיקייה ' + dir.name + '.');
+    // An automatic import speaks up only when something came in or a file could not be read.
+    if (quiet && !c.added && !c.updated && !c.bad) return;
+    toast(entries.length ? (quiet ? 'עדכון אוטומטי מ-' + dir.name + ': ' : '') + parts.join(' · ') : 'אין קבצים בתיקייה ' + dir.name + '.');
+  }
+  // Import on its own when the browser already lets the page read the folder (Chrome and Edge: "Allow on every visit").
+  var autoBusy = false, autoLast = 0;
+  function autoImport() {
+    if (!folderHandle || autoBusy || Date.now() - autoLast < 20000) return;
+    var h = folderHandle;
+    if (typeof h.queryPermission !== 'function') return;
+    autoBusy = true;
+    h.queryPermission({ mode: 'read' }).then(function (p) {
+      if (p !== 'granted') return;
+      autoLast = Date.now();
+      return importFolder(h, true);
+    }).catch(function () {}).then(function () { autoBusy = false; });
   }
   function pickFolder() {
-    return window.showDirectoryPicker({ id: 'incoming', mode: 'read' }).then(function (h) {
+    // Open the picker where the files already are: the remembered folder, or the database file's folder.
+    var opts = { id: 'incoming', mode: 'read' }, near = folderHandle || dbHandle || dbRemembered;
+    if (near) opts.startIn = near;
+    return window.showDirectoryPicker(opts).then(function (h) {
       folderHandle = h;
       idb('readwrite', function (s) { return s.put(h, 'folder'); }).catch(function () {});
       renderFolderButtons();
@@ -1817,7 +1835,7 @@
     document.querySelector('.tab[data-view=""]').hidden = true;
     $('send-box').hidden = true;
     $('dash-hint').textContent = DIR_OK
-      ? 'המלווים שומרים את הקבצים בתיקיית OneDrive של המחקר. "ייבוא מהתיקייה" קורא את כולם בבת אחת; קבצים שכבר יובאו לא נספרים פעמיים.'
+      ? 'המלווים שומרים את הקבצים בתיקיית OneDrive של המחקר. בוחרים את התיקייה פעם אחת, ומאז הדף קורא ממנה בלחיצה, וגם לבד כשהוא נפתח אם הדפדפן מאשר זאת. קבצים שכבר יובאו לא נספרים פעמיים.'
       : 'מייבאים לכאן את קובצי האקסל שהמלווים שלחו. הנתונים מצטברים, ואפשר לשמור אותם בקובץ מאגר אחד.';
   } else {
     $('tabs').hidden = true;
@@ -1831,8 +1849,11 @@
   }
   if (IS_MANAGER && DIR_OK) {
     idb('readonly', function (s) { return s.get('folder'); }).then(function (h) {
-      if (h && h.name && !folderHandle) { folderHandle = h; renderFolderButtons(); }
+      if (h && h.name && !folderHandle) { folderHandle = h; renderFolderButtons(); autoImport(); }
     }).catch(function () {});
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') autoImport();
+    });
   }
 })();
 </script>
