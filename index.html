@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>Patient Check List</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2350C4">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Check List">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   /* Standalone page: no server and no accounts. Everything is kept in this browser
@@ -188,6 +196,14 @@
     display: inline-block; font-size: 12px; font-weight: 500; line-height: 1.5; padding: 0 8px;
     border: 1px solid var(--line); border-radius: 999px; color: var(--muted); white-space: nowrap;
   }
+
+  .install {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px;
+  }
+  .install img { width: 44px; height: 44px; border-radius: 10px; flex: none; }
+  .install-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 12rem; min-width: 0; }
+  .install h2 { font-size: 16px; font-weight: 600; }
 
   .dbbar {
     display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
@@ -405,6 +421,18 @@
   <section class="view" id="view-list">
     <p class="lede">תשעה שלבים לכל מטופל. המלווה רושם את שמו, מסמן כל שלב שהושלם, ובסוף שולח את הסיכום למנהל המחקר.</p>
 
+    <section class="install" id="install" hidden>
+      <img src="icon-192.png" alt="" width="44" height="44">
+      <div class="install-text">
+        <h2>התקנה כאפליקציה</h2>
+        <p class="hint" id="install-hint"></p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn small primary" id="install-btn" hidden>התקנה</button>
+        <button type="button" class="btn small" id="install-later">לא עכשיו</button>
+      </div>
+    </section>
+
     <form class="add" id="add-form" novalidate>
       <h2 class="add-title">מטופל חדש</h2>
       <div class="field">
@@ -436,7 +464,7 @@
       <p>הוסיפו קוד מטופל למעלה, וייפתח לו צ׳קליסט עם השלבים האלה:</p>
       <ol class="panel protocol" id="protocol"></ol>
     </div>
-    <p class="hint">גרסת הדף: 7 (17.11.2026)</p>
+    <p class="hint">גרסת הדף: 8 (22.11.2026)</p>
   </section>
 
   <!-- ===== study manager: dashboard ===== -->
@@ -1828,6 +1856,55 @@
     var u = el('th', 'c-text', 'עודכן'); u.scope = 'col'; tr.appendChild(u);
     $('legend-mark').innerHTML = MARK;
   })();
+
+  // ---------- app: offline copy and installing to the home screen ----------
+  var STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  var IS_IOS = /iPhone|iPad|iPod/i.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
+  var INSTALL_KEY = 'patient-check-list-install-later';
+  var installEvent = null;
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+  // An installed app asks the browser to keep its data; browsers grant this to installed apps without a prompt.
+  if (STANDALONE && navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted().then(function (p) { if (!p) return navigator.storage.persist(); }).catch(function () {});
+  }
+  function installDismissed() {
+    try { return localStorage.getItem(INSTALL_KEY) === '1'; } catch (e) { return false; }
+  }
+  function showInstall(mode) {
+    if (IS_MANAGER || STANDALONE || IN_APP || installDismissed()) return;
+    $('install-btn').hidden = mode !== 'prompt';
+    $('install-hint').textContent = mode === 'prompt'
+      ? 'האפליקציה תופיע במסך הבית, תיפתח במסך מלא, ותעבוד גם בלי קליטה. הנתונים נשארים אותם נתונים.'
+      : 'בספארי: לחצו על כפתור השיתוף (ריבוע עם חץ למעלה), ואז "הוספה למסך הבית". מאז פתחו את הצ׳קליסט רק מהאייקון.';
+    $('install').hidden = false;
+  }
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    installEvent = e;
+    showInstall('prompt');
+  });
+  window.addEventListener('appinstalled', function () {
+    installEvent = null;
+    $('install').hidden = true;
+    toast('האפליקציה הותקנה. מעכשיו פתחו אותה מהאייקון במסך הבית.');
+  });
+  $('install-btn').addEventListener('click', function () {
+    if (!installEvent) return;
+    var ev = installEvent;
+    installEvent = null;
+    ev.prompt();
+    ev.userChoice.then(function (r) { if (r && r.outcome === 'accepted') $('install').hidden = true; }).catch(function () {});
+  });
+  $('install-later').addEventListener('click', function () {
+    try { localStorage.setItem(INSTALL_KEY, '1'); } catch (e) {}
+    $('install').hidden = true;
+  });
+  // Safari on iPhone never offers an install prompt, so the card explains the two taps instead.
+  if (IS_IOS) showInstall('ios');
 
   if (IS_MANAGER) {
     document.title = 'Patient Check List Manager';
